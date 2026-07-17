@@ -1,0 +1,8 @@
+
+[dependencies.tauri-plugin-sql]
+version = "2.0.0"
+features = ["sqlite"]
+
+[dependencies.tauri-plugin-sql]
+version = "2.0.0"
+features = ["sqlite"]
