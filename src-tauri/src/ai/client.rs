@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 // "just follow the format instruction," so this constrains sampling itself
 // rather than hoping the prompt is obeyed.
 const REPLY_GRAMMAR: &str = r#"
-root ::= "{" ws "\"speech\":" ws string "," ws "\"translation\":" ws string "," ws "\"vocab_introduced\":" ws vocab-array "," ws "\"relationship_delta\":" ws integer ws "}"
+root ::= "{" ws "\"speech\":" ws string "," ws "\"translation\":" ws string "," ws "\"vocab_introduced\":" ws vocab-array "," ws "\"relationship_delta\":" ws relationship-delta ws "}"
+relationship-delta ::= "{" ws "\"affection\":" ws integer "," ws "\"trust\":" ws integer "," ws "\"respect\":" ws integer "," ws "\"comfort\":" ws integer "," ws "\"friendship\":" ws integer "," ws "\"study_compatibility\":" ws integer "," ws "\"shared_memories\":" ws integer ws "}"
 vocab-array ::= "[" ws "]" | "[" ws vocab-item (ws "," ws vocab-item)* ws "]"
 vocab-item ::= "{" ws "\"word\":" ws string "," ws "\"reading\":" ws string "," ws "\"meaning\":" ws string "," ws "\"nuance\":" ws string "," ws "\"mnemonic\":" ws string "," ws "\"related_words\":" ws string-array ws "}"
 string-array ::= "[" ws "]" | "[" ws string (ws "," ws string)* ws "]"

@@ -7,6 +7,7 @@ import { GachaScreen } from './features/gacha/components/GachaScreen';
 import { useBoundStore } from './store/useBoundStore';
 import { COMMISSION_DEFINITIONS, todayKey } from './data/commissions';
 import { COMPANIONS } from './data/companions';
+import { defaultRelationshipStats } from './lib/relationship';
 import * as db from './lib/db';
 
 type Tab = 'chat' | 'review' | 'commissions' | 'gacha' | 'sandbox';
@@ -57,6 +58,7 @@ function App() {
             characterId: STARTER_CHARACTER_ID,
             affectionLevel: 1,
             affectionXp: 0,
+            relationshipStats: defaultRelationshipStats(),
             currentOutfitId: 'default',
             isFavorite: false,
             unlockedVoiceLines: [],

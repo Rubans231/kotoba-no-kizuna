@@ -1,3 +1,5 @@
+import type { RelationshipStats } from '../../lib/relationship';
+
 export interface UserProfile {
   id: string;
   username: string;
@@ -24,6 +26,7 @@ export interface CompanionInstance {
   characterId: string;
   affectionLevel: number;
   affectionXp: number;
+  relationshipStats: RelationshipStats;
   currentOutfitId: string;
   isFavorite: boolean;
   unlockedVoiceLines: string[];

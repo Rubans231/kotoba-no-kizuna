@@ -5,6 +5,7 @@ import { STANDARD_BANNER } from '../../../data/gachaBanner';
 import { pullMany, DUPLICATE_REFUND_RATE } from '../../../lib/gacha';
 import type { PullResult } from '../../../lib/gacha';
 import { upsertCompanion, saveProfile } from '../../../lib/db';
+import { defaultRelationshipStats } from '../../../lib/relationship';
 
 const RARITY_COLOR: Record<number, string> = {
   3: '#8ab4f8',
@@ -58,6 +59,7 @@ export function GachaScreen() {
           characterId: result.characterId,
           affectionLevel: 1,
           affectionXp: 0,
+          relationshipStats: defaultRelationshipStats(),
           currentOutfitId: 'default',
           isFavorite: false,
           unlockedVoiceLines: [],
