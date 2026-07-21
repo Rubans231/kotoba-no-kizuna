@@ -1,5 +1,7 @@
-import { StateCreator } from 'zustand';
-import { CompanionInstance } from '../../core/types/database';
+import type { StateCreator } from 'zustand';
+import type { CompanionInstance } from '../../core/types/database';
+import type { RelationshipStats } from '../../lib/relationship';
+import { applyRelationshipDeltas } from '../../lib/relationship';
 
 export interface CompanionSlice {
   companions: Record<string, CompanionInstance>;
@@ -7,6 +9,10 @@ export interface CompanionSlice {
   setCompanions: (list: CompanionInstance[]) => void;
   setActiveCompanion: (instanceId: string | null) => void;
   updateAffection: (instanceId: string, xpGain: number) => void;
+  updateRelationshipStats: (
+    instanceId: string,
+    deltas: Partial<Record<keyof RelationshipStats, number>>,
+  ) => void;
 }
 
 export const createCompanionSlice: StateCreator<CompanionSlice> = (set) => ({
@@ -22,7 +28,7 @@ export const createCompanionSlice: StateCreator<CompanionSlice> = (set) => ({
     const totalXp = target.affectionXp + xpGain;
     const levelThreshold = target.affectionLevel * 200;
     const didLevelUp = totalXp >= levelThreshold;
-    
+
     return {
       companions: {
         ...state.companions,
@@ -34,5 +40,19 @@ export const createCompanionSlice: StateCreator<CompanionSlice> = (set) => ({
         }
       }
     };
-  })
+  }),
+  updateRelationshipStats: (instanceId, deltas) => set((state) => {
+    const target = state.companions[instanceId];
+    if (!target) return {};
+    return {
+      companions: {
+        ...state.companions,
+        [instanceId]: {
+          ...target,
+          relationshipStats: applyRelationshipDeltas(target.relationshipStats, deltas),
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    };
+  }),
 });
