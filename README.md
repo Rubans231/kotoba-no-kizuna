@@ -6,8 +6,10 @@ naturally in conversation, and it schedules that vocabulary into spaced
 repetition review automatically.
 
 Stack: **Tauri 2 (Rust)** + **React 19 + TypeScript** + **Zustand** + **SQLite**
-(via `tauri-plugin-sql`) + Anthropic API for companion dialogue + `lindera`
-for Japanese morphological analysis.
+(via `tauri-plugin-sql`) + a **local model server** (llama-server, OpenAI-compatible)
+for companion dialogue + `lindera` for Japanese morphological analysis.
+
+Runs fully offline against your own local model - nothing is sent to a hosted API.
 
 ## Checkpoint status (see build log in chat / commit message)
 
@@ -26,11 +28,16 @@ time you pull this and report back anything that doesn't build.
 
 ```bash
 npm install
-cp src-tauri/.env.example src-tauri/.env
-# edit src-tauri/.env and paste in your ANTHROPIC_API_KEY
+
+# In a separate terminal, start your local model server first:
+llama-server -m /path/to/model.gguf -c 8192 --host 127.0.0.1 --port 8080 -ngl 999
 
 npm run tauri dev
 ```
+
+No API key needed by default. If you changed llama-server's host/port, or
+started it with `--api-key`, copy `src-tauri/.env.example` to
+`src-tauri/.env` and set `LOCAL_LLM_BASE_URL` / `LOCAL_LLM_API_KEY` there.
 
 The SQLite database (`kotoba.db`) is created automatically on first launch
 and the schema in `src-tauri/migrations/001_init_schema.sql` is applied via
@@ -42,13 +49,17 @@ Tauri's migration runner.
   `src/core/types/companion.ts`) — each companion has a personality,
   specialty, and teaching philosophy that shapes the system prompt sent to
   the model every turn.
-- Chat loop (`src/features/chat/`) — sends the conversation to Claude via a
-  Tauri command (`send_chat_message` in `src-tauri/src/main.rs`), which
-  calls the Anthropic API directly from Rust so the API key never touches
-  the frontend.
-- The model replies in structured JSON (speech, translation, new vocab,
-  relationship delta) instead of free text, so new words can be reliably
-  pulled out and scheduled for review without guessing.
+- Chat loop (`src/features/chat/`) — sends the conversation to a local
+  OpenAI-compatible server (llama-server by default) via a Tauri command
+  (`send_chat_message` in `src-tauri/src/main.rs`). One model stays loaded;
+  each companion is a different system prompt + separate conversation
+  history against that same model, not a model swap per character (swapping
+  GGUF weights per message would take seconds to minutes and kill the UX).
+- The model is constrained via a GBNF grammar (`src-tauri/src/ai/client.rs`)
+  to always reply in structured JSON (speech, translation, new vocab,
+  relationship delta) — this matters more for local models than hosted ones,
+  since they're much less reliable about just following a "reply in JSON"
+  instruction on their own.
 - SRS engine (`src/features/language-engine/utils/srsAlgorithm.ts`) — SM-2,
   wired into a review screen (`src/features/srs/`).
 - Everything persists to SQLite so progress survives a restart.
