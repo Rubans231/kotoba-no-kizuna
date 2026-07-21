@@ -1,10 +1,24 @@
+import type { RelationshipStats } from '../../lib/relationship';
+
 export interface UserProfile {
   id: string;
   username: string;
   accountLevel: number;
   experiencePoints: number;
   unlockedAbilities: string[];
+  gems: number;
+  pityCounter: number;
   createdAt: string;
+}
+
+export interface DailyCommission {
+  commissionId: string;
+  date: string; // YYYY-MM-DD
+  target: number;
+  progress: number;
+  completed: boolean;
+  claimed: boolean;
+  rewardGems: number;
 }
 
 export interface CompanionInstance {
@@ -12,6 +26,7 @@ export interface CompanionInstance {
   characterId: string;
   affectionLevel: number;
   affectionXp: number;
+  relationshipStats: RelationshipStats;
   currentOutfitId: string;
   isFavorite: boolean;
   unlockedVoiceLines: string[];

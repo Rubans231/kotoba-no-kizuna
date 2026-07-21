@@ -1,14 +1,17 @@
-import { StateCreator } from 'zustand';
-import { UserProfile } from '../../core/types/database';
+import type { StateCreator } from 'zustand';
+import type { UserProfile } from '../../core/types/database';
 
 export interface ProfileSlice {
   profile: UserProfile | null;
   setProfile: (profile: UserProfile) => void;
   addXp: (amount: number) => void;
   unlockAbility: (abilityId: string) => void;
+  addGems: (amount: number) => void;
+  spendGems: (amount: number) => boolean;
+  setPityCounter: (value: number) => void;
 }
 
-export const createProfileSlice: StateCreator<ProfileSlice> = (set) => ({
+export const createProfileSlice: StateCreator<ProfileSlice> = (set, get) => ({
   profile: null,
   setProfile: (profile) => set({ profile }),
   addXp: (amount) => set((state) => {
@@ -31,5 +34,19 @@ export const createProfileSlice: StateCreator<ProfileSlice> = (set) => ({
         unlockedAbilities: [...state.profile.unlockedAbilities, abilityId]
       }
     };
-  })
+  }),
+  addGems: (amount) => set((state) => {
+    if (!state.profile) return {};
+    return { profile: { ...state.profile, gems: state.profile.gems + amount } };
+  }),
+  spendGems: (amount) => {
+    const profile = get().profile;
+    if (!profile || profile.gems < amount) return false;
+    set({ profile: { ...profile, gems: profile.gems - amount } });
+    return true;
+  },
+  setPityCounter: (value) => set((state) => {
+    if (!state.profile) return {};
+    return { profile: { ...state.profile, pityCounter: value } };
+  }),
 });
