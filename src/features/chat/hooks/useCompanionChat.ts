@@ -4,7 +4,7 @@ import { useBoundStore } from '../../../store/useBoundStore';
 import { COMPANIONS } from '../../../data/companions';
 import { buildSystemPrompt } from '../../../core/types/companion';
 import type { CompanionReply } from '../../../core/types/companion';
-import { appendConversationLog, upsertSrsRecord, upsertCompanion } from '../../../lib/db';
+import { appendConversationLog, upsertSrsRecord, upsertCompanion, upsertCommission } from '../../../lib/db';
 
 export function useCompanionChat(instanceId: string) {
   const [isSending, setIsSending] = useState(false);
@@ -16,6 +16,7 @@ export function useCompanionChat(instanceId: string) {
   const appendMessage = useBoundStore((s) => s.appendMessage);
   const updateAffection = useBoundStore((s) => s.updateAffection);
   const upsertRecordInStore = useBoundStore((s) => s.upsertRecord);
+  const incrementCommission = useBoundStore((s) => s.incrementCommission);
 
   const sendMessage = useCallback(
     async (userText: string) => {
@@ -108,6 +109,17 @@ export function useCompanionChat(instanceId: string) {
         const updatedInstance = useBoundStore.getState().companions[instanceId];
         if (updatedInstance) void upsertCompanion(updatedInstance);
 
+        const talkProgress = incrementCommission('daily_talk', 1);
+        if (talkProgress) void upsertCommission(talkProgress);
+
+        if (parsed.vocab_introduced.length > 0) {
+          const learnProgress = incrementCommission(
+            'daily_learn_words',
+            parsed.vocab_introduced.length,
+          );
+          if (learnProgress) void upsertCommission(learnProgress);
+        }
+
         return parsed;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -117,7 +129,7 @@ export function useCompanionChat(instanceId: string) {
         setIsSending(false);
       }
     },
-    [instanceId, companions, conversations, srsRecords, appendMessage, updateAffection, upsertRecordInStore],
+    [instanceId, companions, conversations, srsRecords, appendMessage, updateAffection, upsertRecordInStore, incrementCommission],
   );
 
   return { sendMessage, isSending, error };

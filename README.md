@@ -13,16 +13,22 @@ Runs fully offline against your own local model - nothing is sent to a hosted AP
 
 ## Checkpoint status (see build log in chat / commit message)
 
-This is the "Vertical Slice v0" checkpoint: one working loop of
-**chat → teach a word → review it later**, for two companions with distinct
-personas (Aoi, a grammar-focused professor; Rin, a slang/internet-culture
-big sister). No gacha, no Live2D, no outfits yet — those are later phases.
+This is the **"Phase 1 economy" checkpoint**, built on top of Vertical Slice
+v0. Slice v0 proved the chat → teach a word → review it later loop works.
+This checkpoint adds the layer that makes it feel like a game: daily
+commissions, a currency earned from actually learning, a real gacha banner
+with rarity-weighted pulls and pity, and rarity-driven teaching depth (a
+3-star companion teaches word/reading/meaning; a 5-star companion adds
+nuance, mnemonics, and related words per the design doc's "rarity makes you
+a better teacher" idea).
 
-Frontend is verified: `npm run build` and `npx oxlint` both pass clean.
-The Rust/Tauri side is written to the current Tauri v2 + tauri-plugin-sql
-conventions but **has not been compiled** in this environment (no Rust
-toolchain available here) — run `cargo check` inside `src-tauri` the first
-time you pull this and report back anything that doesn't build.
+Frontend is verified: `npm run build` and `npx oxlint` both pass clean, and
+the gacha pull/pity logic was smoke-tested directly (2000 simulated pulls
+landed at roughly the expected rarity distribution, pity counter never
+exceeded the configured cap).
+The Rust/Tauri side still hasn't been compiled in this environment (no Rust
+toolchain available here) — run `cargo check` inside `src-tauri` and report
+back anything that doesn't build.
 
 ## Setup
 
@@ -65,9 +71,10 @@ Tauri's migration runner.
 ## What's actually implemented right now
 
 - Companion persona system (`src/data/companions.ts`,
-  `src/core/types/companion.ts`) — each companion has a personality,
-  specialty, and teaching philosophy that shapes the system prompt sent to
-  the model every turn.
+  `src/core/types/companion.ts`) — 4 companions across 3 rarities (Rin ★3,
+  Sora ★3, Aoi ★4, Yui ★5), each with a personality, specialty, and teaching
+  philosophy that shapes the system prompt every turn. Only Rin starts
+  owned; the rest are earned through the gacha.
 - Chat loop (`src/features/chat/`) — sends the conversation to a local
   OpenAI-compatible server (llama-server by default) via a Tauri command
   (`send_chat_message` in `src-tauri/src/main.rs`). One model stays loaded;
@@ -75,12 +82,17 @@ Tauri's migration runner.
   history against that same model, not a model swap per character (swapping
   GGUF weights per message would take seconds to minutes and kill the UX).
 - The model is constrained via a GBNF grammar (`src-tauri/src/ai/client.rs`)
-  to always reply in structured JSON (speech, translation, new vocab,
-  relationship delta) — this matters more for local models than hosted ones,
-  since they're much less reliable about just following a "reply in JSON"
-  instruction on their own.
+  to always reply in structured JSON, including per-word nuance/mnemonic/
+  related-word fields that a companion is instructed to fill in more or less
+  based on her rarity — the "rarity makes you a better teacher, not a
+  stronger unit" idea from the design doc.
 - SRS engine (`src/features/language-engine/utils/srsAlgorithm.ts`) — SM-2,
   wired into a review screen (`src/features/srs/`).
+- **Daily commissions** (`src/features/commissions/`) — 3 daily tasks (talk,
+  learn 3 words, review 10 cards) that award gems on completion/claim.
+- **Gacha** (`src/features/gacha/`, `src/lib/gacha.ts`) — a real weighted
+  pull (70/25/5 by rarity) with hard pity at 10 pulls and duplicate refunds,
+  against a roster you can extend by adding entries to `companions.ts`.
 - Everything persists to SQLite so progress survives a restart.
 - The original NLP tokenizer sandbox (Rust `lindera` + IPADIC) is kept as a
   "sandbox" tab — useful for testing Japanese tokenization directly.
@@ -89,9 +101,9 @@ Tauri's migration runner.
 
 1. Multi-dimensional relationship stats (trust/respect/comfort, not just one
    affection number) and companion routines/daily life dialogue.
-2. Gacha banners + currency earned from learning actions.
-3. Reading/listening toolkit (hover dictionary, sentence mining).
-4. A real animated companion — see the "Live2D" discussion for the current
+2. Reading/listening toolkit (hover dictionary, sentence mining) — reuses
+   the tokenizer that's already there.
+3. A real animated companion — see the "Live2D" discussion for the current
    plan (procedural layer animation first, real rigging later).
-5. Desktop assistant overlay (OCR, clipboard translation) — leverages the
+4. Desktop assistant overlay (OCR, clipboard translation) — leverages the
    fact this is already a native Tauri app.
