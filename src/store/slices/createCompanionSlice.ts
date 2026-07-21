@@ -1,5 +1,5 @@
-import { StateCreator } from 'zustand';
-import { CompanionInstance } from '../../core/types/database';
+import type { StateCreator } from 'zustand';
+import type { CompanionInstance } from '../../core/types/database';
 
 export interface CompanionSlice {
   companions: Record<string, CompanionInstance>;
