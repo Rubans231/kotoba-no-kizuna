@@ -4,7 +4,19 @@ export interface UserProfile {
   accountLevel: number;
   experiencePoints: number;
   unlockedAbilities: string[];
+  gems: number;
+  pityCounter: number;
   createdAt: string;
+}
+
+export interface DailyCommission {
+  commissionId: string;
+  date: string; // YYYY-MM-DD
+  target: number;
+  progress: number;
+  completed: boolean;
+  claimed: boolean;
+  rewardGems: number;
 }
 
 export interface CompanionInstance {

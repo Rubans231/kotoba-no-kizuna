@@ -4,6 +4,7 @@ import type {
   CompanionInstance,
   SrsRecord,
   ConversationLog,
+  DailyCommission,
 } from '../core/types/database';
 
 // Must match the "sqlite:kotoba.db" identifier registered with the
@@ -34,6 +35,8 @@ export async function loadProfile(id: string): Promise<UserProfile | null> {
     accountLevel: r.account_level,
     experiencePoints: r.experience_points,
     unlockedAbilities: JSON.parse(r.unlocked_abilities || '[]'),
+    gems: r.gems,
+    pityCounter: r.pity_counter,
     createdAt: r.created_at,
   };
 }
@@ -41,14 +44,24 @@ export async function loadProfile(id: string): Promise<UserProfile | null> {
 export async function saveProfile(p: UserProfile): Promise<void> {
   const db = await getDb();
   await db.execute(
-    `INSERT INTO user_profile (id, username, account_level, experience_points, unlocked_abilities)
-     VALUES (?, ?, ?, ?, ?)
+    `INSERT INTO user_profile (id, username, account_level, experience_points, unlocked_abilities, gems, pity_counter)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        username = excluded.username,
        account_level = excluded.account_level,
        experience_points = excluded.experience_points,
-       unlocked_abilities = excluded.unlocked_abilities`,
-    [p.id, p.username, p.accountLevel, p.experiencePoints, JSON.stringify(p.unlockedAbilities)],
+       unlocked_abilities = excluded.unlocked_abilities,
+       gems = excluded.gems,
+       pity_counter = excluded.pity_counter`,
+    [
+      p.id,
+      p.username,
+      p.accountLevel,
+      p.experiencePoints,
+      JSON.stringify(p.unlockedAbilities),
+      p.gems,
+      p.pityCounter,
+    ],
   );
 }
 
@@ -154,5 +167,44 @@ export async function appendConversationLog(log: ConversationLog): Promise<void>
     `INSERT INTO conversation_logs (message_id, instance_id, sender, raw_text, japanese_tokens)
      VALUES (?, ?, ?, ?, ?)`,
     [log.messageId, log.instanceId, log.sender, log.rawText, log.japaneseTokens ?? null],
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Daily commissions
+// ---------------------------------------------------------------------------
+
+export async function loadCommissions(date: string): Promise<DailyCommission[]> {
+  const db = await getDb();
+  const rows = await db.select<any[]>('SELECT * FROM daily_commissions WHERE date = ?', [date]);
+  return rows.map((r) => ({
+    commissionId: r.commission_id,
+    date: r.date,
+    target: r.target,
+    progress: r.progress,
+    completed: !!r.completed,
+    claimed: !!r.claimed,
+    rewardGems: r.reward_gems,
+  }));
+}
+
+export async function upsertCommission(c: DailyCommission): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `INSERT INTO daily_commissions (commission_id, date, target, progress, completed, claimed, reward_gems)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(commission_id, date) DO UPDATE SET
+       progress = excluded.progress,
+       completed = excluded.completed,
+       claimed = excluded.claimed`,
+    [
+      c.commissionId,
+      c.date,
+      c.target,
+      c.progress,
+      c.completed ? 1 : 0,
+      c.claimed ? 1 : 0,
+      c.rewardGems,
+    ],
   );
 }

@@ -2,9 +2,56 @@ import { useState } from 'react';
 import { useBoundStore } from '../../../store/useBoundStore';
 import { useCompanionChat } from '../hooks/useCompanionChat';
 import { COMPANIONS } from '../../../data/companions';
+import type { VocabIntroduced } from '../../../core/types/companion';
 
 interface ChatPanelProps {
   instanceId: string;
+}
+
+function parseVocab(japaneseTokens: string | undefined): VocabIntroduced[] {
+  if (!japaneseTokens) return [];
+  try {
+    const parsed = JSON.parse(japaneseTokens);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function VocabCallout({ items }: { items: VocabIntroduced[] }) {
+  if (items.length === 0) return null;
+  return (
+    <div
+      style={{
+        alignSelf: 'flex-start',
+        maxWidth: '85%',
+        background: '#15202b',
+        border: '1px solid #274050',
+        borderRadius: 10,
+        padding: '8px 12px',
+        fontSize: 13,
+      }}
+    >
+      <div style={{ color: '#7fd1b9', fontSize: 11, marginBottom: 4 }}>NEW WORDS</div>
+      {items.map((v, i) => (
+        <div key={i} style={{ marginBottom: i < items.length - 1 ? 8 : 0 }}>
+          <div>
+            <strong>{v.word}</strong>
+            <span style={{ color: '#999' }}> ({v.reading})</span> — {v.meaning}
+          </div>
+          {v.nuance && <div style={{ color: '#bbb', marginTop: 2 }}>{v.nuance}</div>}
+          {v.mnemonic && (
+            <div style={{ color: '#ffd166', marginTop: 2 }}>💡 {v.mnemonic}</div>
+          )}
+          {v.related_words.length > 0 && (
+            <div style={{ color: '#888', marginTop: 2 }}>
+              Related: {v.related_words.join(', ')}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function ChatPanel({ instanceId }: ChatPanelProps) {
@@ -56,18 +103,20 @@ export function ChatPanel({ instanceId }: ChatPanelProps) {
           </div>
         )}
         {messages.map((m) => (
-          <div
-            key={m.messageId}
-            style={{
-              alignSelf: m.sender === 'player' ? 'flex-end' : 'flex-start',
-              background: m.sender === 'player' ? '#007acc' : '#2a2a2a',
-              color: '#fff',
-              padding: '8px 12px',
-              borderRadius: 12,
-              maxWidth: '75%',
-            }}
-          >
-            {m.rawText}
+          <div key={m.messageId} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div
+              style={{
+                alignSelf: m.sender === 'player' ? 'flex-end' : 'flex-start',
+                background: m.sender === 'player' ? '#007acc' : '#2a2a2a',
+                color: '#fff',
+                padding: '8px 12px',
+                borderRadius: 12,
+                maxWidth: '75%',
+              }}
+            >
+              {m.rawText}
+            </div>
+            {m.sender === 'companion' && <VocabCallout items={parseVocab(m.japaneseTokens)} />}
           </div>
         ))}
         {isSending && (

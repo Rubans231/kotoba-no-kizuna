@@ -43,12 +43,20 @@ fn main() {
     // exported manually every session. Harmless no-op if the file is absent.
     dotenvy::dotenv().ok();
 
-    let migrations = vec![Migration {
-        version: 1,
-        description: "init_schema",
-        sql: include_str!("../migrations/001_init_schema.sql"),
-        kind: MigrationKind::Up,
-    }];
+    let migrations = vec![
+        Migration {
+            version: 1,
+            description: "init_schema",
+            sql: include_str!("../migrations/001_init_schema.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 2,
+            description: "gacha_economy",
+            sql: include_str!("../migrations/002_gacha_economy.sql"),
+            kind: MigrationKind::Up,
+        },
+    ];
 
     tauri::Builder::default()
         .plugin(

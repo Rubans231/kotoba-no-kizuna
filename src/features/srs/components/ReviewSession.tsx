@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useBoundStore } from '../../../store/useBoundStore';
-import { upsertSrsRecord } from '../../../lib/db';
+import { upsertSrsRecord, upsertCommission } from '../../../lib/db';
 
 const GRADE_OPTIONS: { label: string; grade: number }[] = [
   { label: 'Again', grade: 1 },
@@ -12,6 +12,7 @@ const GRADE_OPTIONS: { label: string; grade: number }[] = [
 export function ReviewSession() {
   const srsRecords = useBoundStore((s) => s.srsRecords);
   const processReview = useBoundStore((s) => s.processReview);
+  const incrementCommission = useBoundStore((s) => s.incrementCommission);
 
   const dueItems = useMemo(() => {
     const now = Date.now();
@@ -27,6 +28,9 @@ export function ReviewSession() {
     processReview(current.itemId, grade);
     const updated = useBoundStore.getState().srsRecords[current.itemId];
     if (updated) void upsertSrsRecord(updated);
+
+    const reviewProgress = incrementCommission('daily_review', 1);
+    if (reviewProgress) void upsertCommission(reviewProgress);
   };
 
   if (!current) {
