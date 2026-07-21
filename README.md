@@ -39,6 +39,25 @@ No API key needed by default. If you changed llama-server's host/port, or
 started it with `--api-key`, copy `src-tauri/.env.example` to
 `src-tauri/.env` and set `LOCAL_LLM_BASE_URL` / `LOCAL_LLM_API_KEY` there.
 
+### Switching models
+
+The app doesn't know or care which model is loaded — it just talks to
+whatever's on `LOCAL_LLM_BASE_URL`. Swapping models is purely a llama-server
+launch-command concern, no app changes needed:
+
+```bash
+# Whatever you're already running, e.g. Gemma 4 26B A4B (MoE, fits 12GB VRAM
+# via expert offload):
+llama-server -m gemma-4-26b-a4b-Q4_K_M.gguf -c 8192 --host 127.0.0.1 --port 8080 -ngl 999
+
+# Hermes 4 14B (dense, Qwen3-14B base) - fits fully in 12GB VRAM at Q4_K_M
+# with room to spare for context, no offloading tricks required:
+llama-server -m Hermes-4-14B-Q4_K_M.gguf -c 8192 --host 127.0.0.1 --port 8080 -ngl 999
+```
+
+Just restart llama-server with the new `-m` path and the app picks it up on
+the next message - no rebuild.
+
 The SQLite database (`kotoba.db`) is created automatically on first launch
 and the schema in `src-tauri/migrations/001_init_schema.sql` is applied via
 Tauri's migration runner.
