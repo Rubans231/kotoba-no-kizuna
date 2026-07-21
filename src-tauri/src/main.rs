@@ -26,20 +26,16 @@ fn tokenize_japanese_text(
     Ok(engine.analyzer.analyze(&text))
 }
 
-/// Forwards a chat turn to the Anthropic API. The API key never leaves the
-/// Rust side, so it is never exposed to the webview/frontend.
+/// Forwards a chat turn to the local model server (llama-server by default).
+/// Nothing leaves the machine - this never calls out to a hosted API.
 #[tauri::command]
 async fn send_chat_message(
     system_prompt: String,
     history: Vec<ChatTurn>,
     user_message: String,
 ) -> Result<String, String> {
-    let api_key = std::env::var("ANTHROPIC_API_KEY").map_err(|_| {
-        "ANTHROPIC_API_KEY is not set. Create src-tauri/.env with ANTHROPIC_API_KEY=sk-ant-... (see .env.example)".to_string()
-    })?;
-
     let history_pairs = history.into_iter().map(|t| (t.role, t.content)).collect();
-    ai::client::send_message(&api_key, &system_prompt, history_pairs, &user_message).await
+    ai::client::send_message(&system_prompt, history_pairs, &user_message).await
 }
 
 fn main() {
