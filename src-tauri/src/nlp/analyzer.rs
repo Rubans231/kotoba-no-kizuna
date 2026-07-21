@@ -1,5 +1,9 @@
-use serde::{Serialize, Deserialize};
-use lindera_tokenizer::tokenizer::Tokenizer;
+use serde::{Deserialize, Serialize};
+
+use lindera::dictionary::load_dictionary;
+use lindera::mode::Mode;
+use lindera::segmenter::Segmenter;
+use lindera::tokenizer::Tokenizer;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TokenResult {
@@ -15,29 +19,45 @@ pub struct NlpAnalyzer {
 
 impl NlpAnalyzer {
     pub fn new() -> Self {
-        let tokenizer = Tokenizer::new().expect("Failed to initialize Lindera IPADIC Tokenizer");
+        let dictionary = load_dictionary("embedded://ipadic").expect("Failed to load embedded IPADIC");
+
+        let segmenter = Segmenter::new(
+            Mode::Normal,
+            dictionary,
+            None,
+        );
+
+        let tokenizer = Tokenizer::new(segmenter);
         Self { tokenizer }
     }
 
     pub fn analyze(&self, text: &str) -> Vec<TokenResult> {
         let mut results = Vec::new();
-        if let Ok(tokens) = self.tokenizer.tokenize(text) {
-            for mut token in tokens {
-                let details: Vec<&str> = token.get_details().unwrap_or_default();
-                
-                // IPADIC feature array layout mapping:
-                // 0: POS, 7: Reading, 6: Base Form
-                let reading = details.get(7).map(|s| s.to_string());
-                let base_form = details.get(6).map(|s| s.to_string());
 
-                results.push(TokenResult {
-                    surface: token.text.to_string(),
-                    feature: details.get(0).unwrap_or(&"*").to_string(),
-                    reading,
-                    base_form,
-                });
-            }
+        if let Ok(mut tokens) = self.tokenizer.tokenize(text) {
+            for token in tokens.iter_mut() {
+            let surface = token.surface.to_string();
+
+            let (feature, reading, base_form) = {
+                let details = token.details();
+
+                (
+                    details.first().copied().unwrap_or("*").to_string(),
+                    details.get(7).map(|s| s.to_string()),
+                    details.get(6).map(|s| s.to_string()),
+                )
+            };
+
+            results.push(TokenResult {
+                surface,
+                feature,
+                reading,
+                base_form,
+            });
+        }        
         }
+
         results
     }
+
 }
