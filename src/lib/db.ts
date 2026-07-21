@@ -6,6 +6,7 @@ import type {
   ConversationLog,
   DailyCommission,
 } from '../core/types/database';
+import { defaultRelationshipStats } from '../lib/relationship';
 
 // Must match the "sqlite:kotoba.db" identifier registered with the
 // migrations in src-tauri/src/main.rs.
@@ -72,26 +73,38 @@ export async function saveProfile(p: UserProfile): Promise<void> {
 export async function loadCompanions(): Promise<CompanionInstance[]> {
   const db = await getDb();
   const rows = await db.select<any[]>('SELECT * FROM companions', []);
-  return rows.map((r) => ({
-    instanceId: r.instance_id,
-    characterId: r.character_id,
-    affectionLevel: r.affection_level,
-    affectionXp: r.affection_xp,
-    currentOutfitId: r.current_outfit_id,
-    isFavorite: !!r.is_favorite,
-    unlockedVoiceLines: JSON.parse(r.unlocked_voice_lines || '[]'),
-    updatedAt: r.updated_at,
-  }));
+  return rows.map((r) => {
+    let relationshipStats;
+    try {
+      relationshipStats = r.relationship_stats
+        ? JSON.parse(r.relationship_stats)
+        : defaultRelationshipStats();
+    } catch {
+      relationshipStats = defaultRelationshipStats();
+    }
+    return {
+      instanceId: r.instance_id,
+      characterId: r.character_id,
+      affectionLevel: r.affection_level,
+      affectionXp: r.affection_xp,
+      relationshipStats,
+      currentOutfitId: r.current_outfit_id,
+      isFavorite: !!r.is_favorite,
+      unlockedVoiceLines: JSON.parse(r.unlocked_voice_lines || '[]'),
+      updatedAt: r.updated_at,
+    };
+  });
 }
 
 export async function upsertCompanion(c: CompanionInstance): Promise<void> {
   const db = await getDb();
   await db.execute(
-    `INSERT INTO companions (instance_id, character_id, affection_level, affection_xp, current_outfit_id, is_favorite, unlocked_voice_lines)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO companions (instance_id, character_id, affection_level, affection_xp, relationship_stats, current_outfit_id, is_favorite, unlocked_voice_lines)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(instance_id) DO UPDATE SET
        affection_level = excluded.affection_level,
        affection_xp = excluded.affection_xp,
+       relationship_stats = excluded.relationship_stats,
        current_outfit_id = excluded.current_outfit_id,
        is_favorite = excluded.is_favorite,
        unlocked_voice_lines = excluded.unlocked_voice_lines,
@@ -101,6 +114,7 @@ export async function upsertCompanion(c: CompanionInstance): Promise<void> {
       c.characterId,
       c.affectionLevel,
       c.affectionXp,
+      JSON.stringify(c.relationshipStats),
       c.currentOutfitId,
       c.isFavorite ? 1 : 0,
       JSON.stringify(c.unlockedVoiceLines),

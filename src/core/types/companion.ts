@@ -1,3 +1,7 @@
+import type { RelationshipStats } from '../../lib/relationship';
+import type { DailyRoutine } from '../../lib/companionStatus';
+import { getCurrentActivity } from '../../lib/companionStatus';
+
 export type TeachingArchetype =
   | 'professor'
   | 'big_sister'
@@ -16,10 +20,11 @@ export interface CompanionPersona {
   personality: string;
   teachingPhilosophy: string;
   speechStyle: string;
+  dailyRoutine: DailyRoutine;
 }
 
 export interface PromptContext {
-  affectionLevel: number;
+  relationshipStats: RelationshipStats;
   knownVocab: string[];
   targetLevel: string;
 }
@@ -36,11 +41,21 @@ export interface VocabIntroduced {
   related_words: string[];
 }
 
+export interface RelationshipDelta {
+  affection: number;
+  trust: number;
+  respect: number;
+  comfort: number;
+  friendship: number;
+  study_compatibility: number;
+  shared_memories: number;
+}
+
 export interface CompanionReply {
   speech: string;
   translation: string;
   vocab_introduced: VocabIntroduced[];
-  relationship_delta: number;
+  relationship_delta: RelationshipDelta;
 }
 
 /**
@@ -74,6 +89,9 @@ export function buildSystemPrompt(
       ? `Words they already know: ${ctx.knownVocab.slice(0, 40).join(', ')}. When you introduce a new word that overlaps in meaning with one of these, briefly contrast the nuance like a real teacher would, instead of giving a bare definition.`
       : 'They are just starting out, so keep vocabulary simple and foundational.';
 
+  const stats = ctx.relationshipStats;
+  const currentActivity = getCurrentActivity(persona.dailyRoutine);
+
   return `You are ${persona.displayName}, an AI companion in the Kotoba no Kizuna Japanese-learning academy.
 
 PERSONALITY: ${persona.personality}
@@ -81,7 +99,9 @@ SPECIALTY: ${persona.specialty}
 TEACHING PHILOSOPHY: ${persona.teachingPhilosophy}
 SPEECH STYLE: ${persona.speechStyle}
 
-RELATIONSHIP CONTEXT: Your current affection level with the player is ${ctx.affectionLevel}. Let this subtly color your warmth and familiarity without breaking character or explaining it out loud.
+RIGHT NOW: ${currentActivity} You don't need to announce this, but let it color the scene naturally if it fits (e.g. what's audible/visible around you), and it's fine to mention it directly if the player asks what you're up to.
+
+RELATIONSHIP (0-100 each): trust ${stats.trust}, respect ${stats.respect}, comfort ${stats.comfort}, friendship ${stats.friendship}, affection ${stats.affection}, study compatibility ${stats.studyCompatibility}, shared memories ${stats.sharedMemories}. Let these subtly shape your tone - low trust/comfort means a bit more reserved and polite even if your personality is normally loud; high numbers mean noticeably warmer and more familiar. Don't state the numbers out loud or explain this system to the player.
 
 LEARNER LEVEL: The player is roughly ${ctx.targetLevel}. ${vocabLine}
 
@@ -101,8 +121,18 @@ RESPONSE FORMAT: Reply with ONLY a single valid JSON object - no markdown code f
       "related_words": []
     }
   ],
-  "relationship_delta": 0
+  "relationship_delta": {
+    "affection": 0,
+    "trust": 0,
+    "respect": 0,
+    "comfort": 0,
+    "friendship": 0,
+    "study_compatibility": 0,
+    "shared_memories": 0
+  }
 }
 
-relationship_delta is an integer from 0 to 10 for how much this exchange deepened the relationship. Only include a word in vocab_introduced if it's a new/notable content word (noun, verb, adjective, set phrase) you deliberately taught this turn - not every word in the sentence. It's fine for vocab_introduced to be empty on turns that are just casual chat.`;
+Only include a word in vocab_introduced if it's a new/notable content word (noun, verb, adjective, set phrase) you deliberately taught this turn - not every word in the sentence. It's fine for vocab_introduced to be empty on turns that are just casual chat.
+
+Each relationship_delta field is a small integer, usually 0. Most turns should move at most 1-2 dimensions - don't move all seven every time. Rough guide: affection rises with warm/friendly exchanges in general; trust rises when the player is vulnerable (admits confusion, makes a mistake) and you respond supportively; respect rises when the player demonstrates real understanding of something you taught; comfort rises during casual, low-stakes daily-life chat; friendship rises with sustained ordinary back-and-forth; study_compatibility rises specifically when your teaching approach visibly clicks for them; shared_memories should almost always stay 0 and only tick up by 1 for a turn that's genuinely memorable, not routine.`;
 }

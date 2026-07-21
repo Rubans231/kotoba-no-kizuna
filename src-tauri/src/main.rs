@@ -56,6 +56,12 @@ fn main() {
             sql: include_str!("../migrations/002_gacha_economy.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 3,
+            description: "relationship_depth",
+            sql: include_str!("../migrations/003_relationship_depth.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

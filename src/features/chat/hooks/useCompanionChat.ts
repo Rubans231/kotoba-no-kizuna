@@ -15,6 +15,7 @@ export function useCompanionChat(instanceId: string) {
   const srsRecords = useBoundStore((s) => s.srsRecords);
   const appendMessage = useBoundStore((s) => s.appendMessage);
   const updateAffection = useBoundStore((s) => s.updateAffection);
+  const updateRelationshipStats = useBoundStore((s) => s.updateRelationshipStats);
   const upsertRecordInStore = useBoundStore((s) => s.upsertRecord);
   const incrementCommission = useBoundStore((s) => s.incrementCommission);
 
@@ -51,7 +52,7 @@ export function useCompanionChat(instanceId: string) {
         .filter(Boolean);
 
       const systemPrompt = buildSystemPrompt(persona, {
-        affectionLevel: instance.affectionLevel,
+        relationshipStats: instance.relationshipStats,
         knownVocab,
         targetLevel: 'N5',
       });
@@ -105,7 +106,16 @@ export function useCompanionChat(instanceId: string) {
           }
         }
 
-        updateAffection(instanceId, parsed.relationship_delta);
+        updateAffection(instanceId, parsed.relationship_delta.affection);
+        updateRelationshipStats(instanceId, {
+          affection: parsed.relationship_delta.affection,
+          trust: parsed.relationship_delta.trust,
+          respect: parsed.relationship_delta.respect,
+          comfort: parsed.relationship_delta.comfort,
+          friendship: parsed.relationship_delta.friendship,
+          studyCompatibility: parsed.relationship_delta.study_compatibility,
+          sharedMemories: parsed.relationship_delta.shared_memories,
+        });
         const updatedInstance = useBoundStore.getState().companions[instanceId];
         if (updatedInstance) void upsertCompanion(updatedInstance);
 
@@ -129,7 +139,7 @@ export function useCompanionChat(instanceId: string) {
         setIsSending(false);
       }
     },
-    [instanceId, companions, conversations, srsRecords, appendMessage, updateAffection, upsertRecordInStore, incrementCommission],
+    [instanceId, companions, conversations, srsRecords, appendMessage, updateAffection, updateRelationshipStats, upsertRecordInStore, incrementCommission],
   );
 
   return { sendMessage, isSending, error };

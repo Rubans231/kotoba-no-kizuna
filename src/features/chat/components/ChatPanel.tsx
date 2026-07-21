@@ -3,6 +3,9 @@ import { useBoundStore } from '../../../store/useBoundStore';
 import { useCompanionChat } from '../hooks/useCompanionChat';
 import { COMPANIONS } from '../../../data/companions';
 import type { VocabIntroduced } from '../../../core/types/companion';
+import { getCurrentActivity } from '../../../lib/companionStatus';
+import { overallBondLevel } from '../../../lib/relationship';
+import { RelationshipBars } from './RelationshipBars';
 
 interface ChatPanelProps {
   instanceId: string;
@@ -56,6 +59,7 @@ function VocabCallout({ items }: { items: VocabIntroduced[] }) {
 
 export function ChatPanel({ instanceId }: ChatPanelProps) {
   const [draft, setDraft] = useState('');
+  const [showBond, setShowBond] = useState(false);
   const instance = useBoundStore((s) => s.companions[instanceId]);
   const messages = useBoundStore((s) => s.conversations[instanceId] || []);
   const { sendMessage, isSending, error } = useCompanionChat(instanceId);
@@ -80,12 +84,31 @@ export function ChatPanel({ instanceId }: ChatPanelProps) {
         margin: '0 auto',
       }}
     >
-      <div style={{ padding: '12px 16px', borderBottom: '1px solid #333' }}>
-        <strong>{persona.displayName}</strong>
-        <span style={{ marginLeft: 8, color: '#888', fontSize: 13 }}>
-          {persona.specialty} · Lv.{instance.affectionLevel}
-        </span>
-      </div>
+      <button
+        onClick={() => setShowBond((v) => !v)}
+        style={{
+          textAlign: 'left',
+          padding: '12px 16px',
+          background: 'transparent',
+          border: 'none',
+          borderBottom: '1px solid #333',
+          color: 'inherit',
+          cursor: 'pointer',
+          width: '100%',
+        }}
+      >
+        <div>
+          <strong>{persona.displayName}</strong>
+          <span style={{ marginLeft: 8, color: '#888', fontSize: 13 }}>
+            {persona.specialty} · Bond Lv.{overallBondLevel(instance.relationshipStats)}
+          </span>
+        </div>
+        <div style={{ color: '#666', fontSize: 12, marginTop: 3, fontStyle: 'italic' }}>
+          {getCurrentActivity(persona.dailyRoutine)}
+        </div>
+      </button>
+
+      {showBond && <RelationshipBars stats={instance.relationshipStats} />}
 
       <div
         style={{

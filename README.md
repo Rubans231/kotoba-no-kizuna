@@ -13,19 +13,19 @@ Runs fully offline against your own local model - nothing is sent to a hosted AP
 
 ## Checkpoint status (see build log in chat / commit message)
 
-This is the **"Phase 1 economy" checkpoint**, built on top of Vertical Slice
-v0. Slice v0 proved the chat → teach a word → review it later loop works.
-This checkpoint adds the layer that makes it feel like a game: daily
-commissions, a currency earned from actually learning, a real gacha banner
-with rarity-weighted pulls and pity, and rarity-driven teaching depth (a
-3-star companion teaches word/reading/meaning; a 5-star companion adds
-nuance, mnemonics, and related words per the design doc's "rarity makes you
-a better teacher" idea).
+This is the **"Phase 2 relationship depth" checkpoint**, built on top of the
+Phase 1 economy checkpoint. Companions now track seven relationship
+dimensions (trust, respect, comfort, friendship, affection, study
+compatibility, shared memories) instead of one affection number, the model
+is asked to move only the 1-2 dimensions that actually make sense per turn,
+and every companion has a daily routine that changes what she's "doing"
+based on real time of day and feeds into her dialogue.
 
-Frontend is verified: `npm run build` and `npx oxlint` both pass clean, and
-the gacha pull/pity logic was smoke-tested directly (2000 simulated pulls
-landed at roughly the expected rarity distribution, pity counter never
-exceeded the configured cap).
+Frontend is verified: `npm run build` and `npx oxlint` both pass clean, the
+gacha pull/pity logic was smoke-tested directly (2000 simulated pulls landed
+at roughly the expected rarity distribution), and the relationship stat math
+was smoke-tested too (deltas accumulate correctly, clamping to 0-100 holds
+under repeated overshoot).
 The Rust/Tauri side still hasn't been compiled in this environment (no Rust
 toolchain available here) — run `cargo check` inside `src-tauri` and report
 back anything that doesn't build.
@@ -93,14 +93,24 @@ Tauri's migration runner.
 - **Gacha** (`src/features/gacha/`, `src/lib/gacha.ts`) — a real weighted
   pull (70/25/5 by rarity) with hard pity at 10 pulls and duplicate refunds,
   against a roster you can extend by adding entries to `companions.ts`.
+- **Relationship depth** (`src/lib/relationship.ts`,
+  `src/features/chat/components/RelationshipBars.tsx`) — seven tracked
+  dimensions per companion (trust, respect, comfort, friendship, affection,
+  study compatibility, shared memories), each nudged independently by the
+  model based on what actually happened in the turn, visible as a
+  collapsible bar panel under her name in chat.
+- **Daily routines** (`src/lib/companionStatus.ts`) — each companion has a
+  morning/afternoon/evening/late-night activity that changes with real time
+  of day, shown as a status line in chat and fed into her system prompt so
+  she can reference it naturally.
 - Everything persists to SQLite so progress survives a restart.
 - The original NLP tokenizer sandbox (Rust `lindera` + IPADIC) is kept as a
   "sandbox" tab — useful for testing Japanese tokenization directly.
 
 ## Next phases (not built yet)
 
-1. Multi-dimensional relationship stats (trust/respect/comfort, not just one
-   affection number) and companion routines/daily life dialogue.
+1. Events (seasonal banners/stories) and outfits — see the See-through /
+   StretchyStudio discussion for the current art pipeline plan.
 2. Reading/listening toolkit (hover dictionary, sentence mining) — reuses
    the tokenizer that's already there.
 3. A real animated companion — see the "Live2D" discussion for the current
