@@ -1,27 +1,72 @@
-#ifndef DEBUG
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-#endif
 
+mod ai;
 mod nlp;
+
 use nlp::analyzer::{NlpAnalyzer, TokenResult};
+use serde::Deserialize;
 use tauri::State;
+use tauri_plugin_sql::{Migration, MigrationKind};
 
 struct AppEngine {
     analyzer: NlpAnalyzer,
 }
 
+#[derive(Deserialize)]
+struct ChatTurn {
+    role: String,
+    content: String,
+}
+
 #[tauri::command]
-fn tokenize_japanese_text(text: String, engine: State<'_, AppEngine>) -> Result<Vec<TokenResult>, String> {
+fn tokenize_japanese_text(
+    text: String,
+    engine: State<'_, AppEngine>,
+) -> Result<Vec<TokenResult>, String> {
     Ok(engine.analyzer.analyze(&text))
 }
 
+/// Forwards a chat turn to the Anthropic API. The API key never leaves the
+/// Rust side, so it is never exposed to the webview/frontend.
+#[tauri::command]
+async fn send_chat_message(
+    system_prompt: String,
+    history: Vec<ChatTurn>,
+    user_message: String,
+) -> Result<String, String> {
+    let api_key = std::env::var("ANTHROPIC_API_KEY").map_err(|_| {
+        "ANTHROPIC_API_KEY is not set. Create src-tauri/.env with ANTHROPIC_API_KEY=sk-ant-... (see .env.example)".to_string()
+    })?;
+
+    let history_pairs = history.into_iter().map(|t| (t.role, t.content)).collect();
+    ai::client::send_message(&api_key, &system_prompt, history_pairs, &user_message).await
+}
+
 fn main() {
+    // Loads src-tauri/.env in dev so ANTHROPIC_API_KEY doesn't need to be
+    // exported manually every session. Harmless no-op if the file is absent.
+    dotenvy::dotenv().ok();
+
+    let migrations = vec![Migration {
+        version: 1,
+        description: "init_schema",
+        sql: include_str!("../migrations/001_init_schema.sql"),
+        kind: MigrationKind::Up,
+    }];
+
     tauri::Builder::default()
-        .plugin(tauri_plugin_sql::Builder::default().build())
+        .plugin(
+            tauri_plugin_sql::Builder::default()
+                .add_migrations("sqlite:kotoba.db", migrations)
+                .build(),
+        )
         .manage(AppEngine {
             analyzer: NlpAnalyzer::new(),
         })
-        .invoke_handler(tauri::generate_handler![tokenize_japanese_text])
+        .invoke_handler(tauri::generate_handler![
+            tokenize_japanese_text,
+            send_chat_message
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

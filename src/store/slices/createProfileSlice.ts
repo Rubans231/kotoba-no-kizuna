@@ -1,5 +1,5 @@
-import { StateCreator } from 'zustand';
-import { UserProfile } from '../../core/types/database';
+import type { StateCreator } from 'zustand';
+import type { UserProfile } from '../../core/types/database';
 
 export interface ProfileSlice {
   profile: UserProfile | null;
