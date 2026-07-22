@@ -5,6 +5,7 @@ import type {
   SrsRecord,
   ConversationLog,
   DailyCommission,
+  VocabDictionaryEntry,
 } from '../core/types/database';
 import { defaultRelationshipStats } from '../lib/relationship';
 
@@ -36,6 +37,7 @@ export async function loadProfile(id: string): Promise<UserProfile | null> {
     accountLevel: r.account_level,
     experiencePoints: r.experience_points,
     unlockedAbilities: JSON.parse(r.unlocked_abilities || '[]'),
+    enabledAbilities: JSON.parse(r.enabled_abilities || '[]'),
     gems: r.gems,
     pityCounter: r.pity_counter,
     createdAt: r.created_at,
@@ -45,13 +47,14 @@ export async function loadProfile(id: string): Promise<UserProfile | null> {
 export async function saveProfile(p: UserProfile): Promise<void> {
   const db = await getDb();
   await db.execute(
-    `INSERT INTO user_profile (id, username, account_level, experience_points, unlocked_abilities, gems, pity_counter)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO user_profile (id, username, account_level, experience_points, unlocked_abilities, enabled_abilities, gems, pity_counter)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        username = excluded.username,
        account_level = excluded.account_level,
        experience_points = excluded.experience_points,
        unlocked_abilities = excluded.unlocked_abilities,
+       enabled_abilities = excluded.enabled_abilities,
        gems = excluded.gems,
        pity_counter = excluded.pity_counter`,
     [
@@ -60,6 +63,7 @@ export async function saveProfile(p: UserProfile): Promise<void> {
       p.accountLevel,
       p.experiencePoints,
       JSON.stringify(p.unlockedAbilities),
+      JSON.stringify(p.enabledAbilities),
       p.gems,
       p.pityCounter,
     ],
@@ -220,5 +224,68 @@ export async function upsertCommission(c: DailyCommission): Promise<void> {
       c.claimed ? 1 : 0,
       c.rewardGems,
     ],
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Vocab dictionary - lets review cards show full teaching detail (reading,
+// meaning, nuance, mnemonic, related words), not just the bare word.
+// ---------------------------------------------------------------------------
+
+export async function loadVocabDictionary(): Promise<VocabDictionaryEntry[]> {
+  const db = await getDb();
+  const rows = await db.select<any[]>('SELECT * FROM vocab_dictionary', []);
+  return rows.map((r) => ({
+    word: r.word,
+    reading: r.reading,
+    meaning: r.meaning,
+    nuance: r.nuance,
+    mnemonic: r.mnemonic,
+    relatedWords: JSON.parse(r.related_words || '[]'),
+    taughtByCharacterId: r.taught_by_character_id,
+    firstTaughtAt: r.first_taught_at,
+  }));
+}
+
+/**
+ * Inserts a new vocab entry, or - if the word is already known - only fills
+ * in fields that were previously blank (e.g. a 3-star companion taught the
+ * bare word first, then a 5-star companion later adds nuance/mnemonic for
+ * the same word). Never overwrites existing non-empty teaching detail with
+ * blanker data from a lower-rarity companion.
+ */
+export async function upsertVocabDictionaryEntry(entry: VocabDictionaryEntry): Promise<void> {
+  const db = await getDb();
+  const existingRows = await db.select<any[]>(
+    'SELECT * FROM vocab_dictionary WHERE word = ?',
+    [entry.word],
+  );
+
+  if (existingRows.length === 0) {
+    await db.execute(
+      `INSERT INTO vocab_dictionary (word, reading, meaning, nuance, mnemonic, related_words, taught_by_character_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        entry.word,
+        entry.reading,
+        entry.meaning,
+        entry.nuance,
+        entry.mnemonic,
+        JSON.stringify(entry.relatedWords),
+        entry.taughtByCharacterId,
+      ],
+    );
+    return;
+  }
+
+  const existing = existingRows[0];
+  const mergedNuance = existing.nuance ? existing.nuance : entry.nuance;
+  const mergedMnemonic = existing.mnemonic ? existing.mnemonic : entry.mnemonic;
+  const existingRelated: string[] = JSON.parse(existing.related_words || '[]');
+  const mergedRelated = existingRelated.length > 0 ? existingRelated : entry.relatedWords;
+
+  await db.execute(
+    `UPDATE vocab_dictionary SET nuance = ?, mnemonic = ?, related_words = ? WHERE word = ?`,
+    [mergedNuance, mergedMnemonic, JSON.stringify(mergedRelated), entry.word],
   );
 }
