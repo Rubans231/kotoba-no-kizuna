@@ -6,6 +6,7 @@ export interface ProfileSlice {
   setProfile: (profile: UserProfile) => void;
   addXp: (amount: number) => void;
   unlockAbility: (abilityId: string) => void;
+  toggleAbility: (abilityId: string) => void;
   addGems: (amount: number) => void;
   spendGems: (amount: number) => boolean;
   setPityCounter: (value: number) => void;
@@ -26,12 +27,31 @@ export const createProfileSlice: StateCreator<ProfileSlice> = (set, get) => ({
       }
     };
   }),
+  // Unlocking is permanent and defaults the ability to enabled - the
+  // player can turn it off afterward via toggleAbility, but unlocking
+  // something and having it silently do nothing until you find a toggle
+  // buried in a menu is a worse first impression than "on by default".
   unlockAbility: (abilityId) => set((state) => {
     if (!state.profile || state.profile.unlockedAbilities.includes(abilityId)) return {};
     return {
       profile: {
         ...state.profile,
-        unlockedAbilities: [...state.profile.unlockedAbilities, abilityId]
+        unlockedAbilities: [...state.profile.unlockedAbilities, abilityId],
+        enabledAbilities: state.profile.enabledAbilities.includes(abilityId)
+          ? state.profile.enabledAbilities
+          : [...state.profile.enabledAbilities, abilityId],
+      }
+    };
+  }),
+  toggleAbility: (abilityId) => set((state) => {
+    if (!state.profile || !state.profile.unlockedAbilities.includes(abilityId)) return {};
+    const isEnabled = state.profile.enabledAbilities.includes(abilityId);
+    return {
+      profile: {
+        ...state.profile,
+        enabledAbilities: isEnabled
+          ? state.profile.enabledAbilities.filter((id) => id !== abilityId)
+          : [...state.profile.enabledAbilities, abilityId],
       }
     };
   }),
