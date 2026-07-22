@@ -4,19 +4,21 @@ import { ChatPanel } from './features/chat/components/ChatPanel';
 import { ReviewSession } from './features/srs/components/ReviewSession';
 import { CommissionsPanel } from './features/commissions/components/CommissionsPanel';
 import { GachaScreen } from './features/gacha/components/GachaScreen';
+import { AbilitiesPanel } from './features/abilities/components/AbilitiesPanel';
 import { useBoundStore } from './store/useBoundStore';
+import type { AppTab } from './store/slices/createUiSlice';
 import { COMMISSION_DEFINITIONS, todayKey } from './data/commissions';
 import { COMPANIONS } from './data/companions';
 import { defaultRelationshipStats } from './lib/relationship';
+import { checkForNewUnlocks } from './lib/abilityUnlocks';
 import * as db from './lib/db';
-
-type Tab = 'chat' | 'review' | 'commissions' | 'gacha' | 'sandbox';
 
 const DEV_USER_ID = 'usr_dev_test_01';
 const STARTER_CHARACTER_ID = 'rin_slang';
 
+const TABS: AppTab[] = ['chat', 'review', 'commissions', 'gacha', 'abilities', 'sandbox'];
+
 function App() {
-  const [tab, setTab] = useState<Tab>('chat');
   const [ready, setReady] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
 
@@ -26,9 +28,15 @@ function App() {
   const setActiveCompanion = useBoundStore((s) => s.setActiveCompanion);
   const setConversation = useBoundStore((s) => s.setConversation);
   const setCommissions = useBoundStore((s) => s.setCommissions);
+  const setVocabDictionary = useBoundStore((s) => s.setVocabDictionary);
+  const unlockAbility = useBoundStore((s) => s.unlockAbility);
+  const hasUnseenAbilityUnlock = useBoundStore((s) => s.hasUnseenAbilityUnlock);
+  const setHasUnseenAbilityUnlock = useBoundStore((s) => s.setHasUnseenAbilityUnlock);
   const activeCompanionId = useBoundStore((s) => s.activeCompanionId);
   const companions = useBoundStore((s) => s.companions);
   const profile = useBoundStore((s) => s.profile);
+  const activeTab = useBoundStore((s) => s.activeTab);
+  const setActiveTab = useBoundStore((s) => s.setActiveTab);
 
   useEffect(() => {
     (async () => {
@@ -41,6 +49,7 @@ function App() {
             accountLevel: 1,
             experiencePoints: 0,
             unlockedAbilities: [],
+            enabledAbilities: [],
             gems: 300,
             pityCounter: 0,
             createdAt: new Date().toISOString(),
@@ -78,6 +87,9 @@ function App() {
         const srsRecords = await db.loadSrsRecords();
         setSrsRecords(srsRecords);
 
+        const vocabDictionary = await db.loadVocabDictionary();
+        setVocabDictionary(vocabDictionary);
+
         // Seed today's commissions if this is the first launch today.
         const today = todayKey();
         let commissions = await db.loadCommissions(today);
@@ -95,6 +107,20 @@ function App() {
         }
         setCommissions(commissions);
 
+        // Catch any abilities that already qualify from existing save data
+        // (e.g. a bond level reached before this feature existed).
+        const companionsMap = companions.reduce(
+          (acc, c) => ({ ...acc, [c.instanceId]: c }),
+          {} as Record<string, (typeof companions)[number]>,
+        );
+        const newlyUnlocked = checkForNewUnlocks(companionsMap, profile.unlockedAbilities);
+        if (newlyUnlocked.length > 0) {
+          for (const abilityId of newlyUnlocked) unlockAbility(abilityId);
+          setHasUnseenAbilityUnlock(true);
+          const profileAfterUnlock = useBoundStore.getState().profile;
+          if (profileAfterUnlock) await db.saveProfile(profileAfterUnlock);
+        }
+
         setReady(true);
       } catch (err) {
         setInitError(err instanceof Error ? err.message : String(err));
@@ -102,6 +128,21 @@ function App() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Defensive: if the active companion ever points at something that isn't
+  // in the companions map (e.g. stale id, or the map re-seeded around it),
+  // fall back to the first available companion instead of rendering a dead
+  // end. Combined with the flex layout fix below, this is a belt-and-braces
+  // guard, not the primary fix for the "blank screen after gacha" bug -
+  // that turned out to be a CSS issue (see index.css).
+  useEffect(() => {
+    if (!ready) return;
+    const ids = Object.keys(companions);
+    if (ids.length === 0) return;
+    if (!activeCompanionId || !companions[activeCompanionId]) {
+      setActiveCompanion(ids[0]);
+    }
+  }, [ready, companions, activeCompanionId, setActiveCompanion]);
 
   if (initError) {
     return (
@@ -118,11 +159,12 @@ function App() {
   return (
     <div
       style={{
-        minHeight: '100vh',
+        height: '100%',
         background: '#111',
         color: '#eee',
         display: 'flex',
         flexDirection: 'column',
+        overflow: 'hidden',
       }}
     >
       <nav
@@ -132,34 +174,60 @@ function App() {
           alignItems: 'center',
           padding: 12,
           borderBottom: '1px solid #333',
+          flexShrink: 0,
         }}
       >
         <div style={{ display: 'flex', gap: 4 }}>
-          {(['chat', 'review', 'commissions', 'gacha', 'sandbox'] as Tab[]).map((t) => (
+          {TABS.map((t) => (
             <button
               key={t}
-              onClick={() => setTab(t)}
+              onClick={() => {
+                setActiveTab(t);
+                if (t === 'abilities') setHasUnseenAbilityUnlock(false);
+              }}
               style={{
+                position: 'relative',
                 padding: '8px 14px',
                 borderRadius: 6,
                 border: 'none',
-                background: tab === t ? '#007acc' : '#2a2a2a',
+                background: activeTab === t ? '#007acc' : '#2a2a2a',
                 color: '#fff',
                 cursor: 'pointer',
                 textTransform: 'capitalize',
               }}
             >
               {t}
+              {t === 'abilities' && hasUnseenAbilityUnlock && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: 4,
+                    right: 4,
+                    width: 7,
+                    height: 7,
+                    borderRadius: '50%',
+                    background: '#ff6b6b',
+                  }}
+                />
+              )}
             </button>
           ))}
         </div>
         <div style={{ color: '#ffd166', fontSize: 14 }}>{profile?.gems ?? 0} gems</div>
       </nav>
-      <div style={{ flex: 1, overflow: 'auto' }}>
-        {tab === 'chat' && (
-          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+        {activeTab === 'chat' && (
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
             {Object.keys(companions).length > 1 && (
-              <div style={{ display: 'flex', gap: 6, padding: '10px 16px', borderBottom: '1px solid #222' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 6,
+                  padding: '10px 16px',
+                  borderBottom: '1px solid #222',
+                  flexShrink: 0,
+                }}
+              >
                 {Object.values(companions).map((c) => (
                   <button
                     key={c.instanceId}
@@ -179,15 +247,16 @@ function App() {
                 ))}
               </div>
             )}
-            <div style={{ flex: 1, overflow: 'hidden' }}>
+            <div style={{ flex: 1, minHeight: 0 }}>
               {activeCompanionId && <ChatPanel instanceId={activeCompanionId} />}
             </div>
           </div>
         )}
-        {tab === 'review' && <ReviewSession />}
-        {tab === 'commissions' && <CommissionsPanel />}
-        {tab === 'gacha' && <GachaScreen />}
-        {tab === 'sandbox' && <DevSandbox />}
+        {activeTab === 'review' && <ReviewSession />}
+        {activeTab === 'commissions' && <CommissionsPanel />}
+        {activeTab === 'gacha' && <GachaScreen />}
+        {activeTab === 'abilities' && <AbilitiesPanel />}
+        {activeTab === 'sandbox' && <DevSandbox />}
       </div>
     </div>
   );
