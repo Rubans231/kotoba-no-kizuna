@@ -4,7 +4,9 @@ import { useBoundStore } from '../../../store/useBoundStore';
 import { COMPANIONS } from '../../../data/companions';
 import { buildSystemPrompt } from '../../../core/types/companion';
 import type { CompanionReply } from '../../../core/types/companion';
-import { appendConversationLog, upsertSrsRecord, upsertCompanion, upsertCommission } from '../../../lib/db';
+import { appendConversationLog, upsertSrsRecord, upsertCompanion, upsertCommission, upsertVocabDictionaryEntry, saveProfile } from '../../../lib/db';
+import { ABILITY_DEFINITIONS } from '../../../data/abilities';
+import { checkForNewUnlocks } from '../../../lib/abilityUnlocks';
 
 export function useCompanionChat(instanceId: string) {
   const [isSending, setIsSending] = useState(false);
@@ -18,6 +20,10 @@ export function useCompanionChat(instanceId: string) {
   const updateRelationshipStats = useBoundStore((s) => s.updateRelationshipStats);
   const upsertRecordInStore = useBoundStore((s) => s.upsertRecord);
   const incrementCommission = useBoundStore((s) => s.incrementCommission);
+  const upsertVocabEntryInStore = useBoundStore((s) => s.upsertVocabEntry);
+  const profile = useBoundStore((s) => s.profile);
+  const unlockAbility = useBoundStore((s) => s.unlockAbility);
+  const setHasUnseenAbilityUnlock = useBoundStore((s) => s.setHasUnseenAbilityUnlock);
 
   const sendMessage = useCallback(
     async (userText: string) => {
@@ -51,10 +57,15 @@ export function useCompanionChat(instanceId: string) {
         .map((r) => r.itemId.split(':')[1])
         .filter(Boolean);
 
+      const enabledEffects = (profile?.enabledAbilities ?? [])
+        .map((id) => ABILITY_DEFINITIONS.find((d) => d.abilityId === id)?.effect)
+        .filter((e): e is NonNullable<typeof e> => Boolean(e));
+
       const systemPrompt = buildSystemPrompt(persona, {
         relationshipStats: instance.relationshipStats,
         knownVocab,
         targetLevel: 'N5',
+        enabledEffects,
       });
 
       const historyForApi = history.map((m) => ({
@@ -104,6 +115,24 @@ export function useCompanionChat(instanceId: string) {
             upsertRecordInStore(record);
             void upsertSrsRecord(record);
           }
+
+          // Always upsert the dictionary entry (not just on first sight) -
+          // a higher-rarity companion re-teaching a word already in the
+          // deck can fill in nuance/mnemonic that a 3-star companion left
+          // blank the first time. upsertVocabEntry never clobbers existing
+          // non-empty detail with blanker data.
+          const vocabEntry = {
+            word: v.word,
+            reading: v.reading,
+            meaning: v.meaning,
+            nuance: v.nuance,
+            mnemonic: v.mnemonic,
+            relatedWords: v.related_words,
+            taughtByCharacterId: instance.characterId,
+            firstTaughtAt: new Date().toISOString(),
+          };
+          upsertVocabEntryInStore(vocabEntry);
+          void upsertVocabDictionaryEntry(vocabEntry);
         }
 
         updateAffection(instanceId, parsed.relationship_delta.affection);
@@ -118,6 +147,24 @@ export function useCompanionChat(instanceId: string) {
         });
         const updatedInstance = useBoundStore.getState().companions[instanceId];
         if (updatedInstance) void upsertCompanion(updatedInstance);
+
+        // Check whether reaching a new bond level with this (or any)
+        // companion just unlocked a global ability passive.
+        const currentProfile = useBoundStore.getState().profile;
+        if (currentProfile) {
+          const newlyUnlocked = checkForNewUnlocks(
+            useBoundStore.getState().companions,
+            currentProfile.unlockedAbilities,
+          );
+          if (newlyUnlocked.length > 0) {
+            for (const abilityId of newlyUnlocked) {
+              unlockAbility(abilityId);
+            }
+            setHasUnseenAbilityUnlock(true);
+            const profileAfterUnlock = useBoundStore.getState().profile;
+            if (profileAfterUnlock) void saveProfile(profileAfterUnlock);
+          }
+        }
 
         const talkProgress = incrementCommission('daily_talk', 1);
         if (talkProgress) void upsertCommission(talkProgress);
@@ -139,7 +186,7 @@ export function useCompanionChat(instanceId: string) {
         setIsSending(false);
       }
     },
-    [instanceId, companions, conversations, srsRecords, appendMessage, updateAffection, updateRelationshipStats, upsertRecordInStore, incrementCommission],
+    [instanceId, companions, conversations, srsRecords, appendMessage, updateAffection, updateRelationshipStats, upsertRecordInStore, incrementCommission, upsertVocabEntryInStore, profile, unlockAbility, setHasUnseenAbilityUnlock],
   );
 
   return { sendMessage, isSending, error };

@@ -1,6 +1,7 @@
 import type { RelationshipStats } from '../../lib/relationship';
 import type { DailyRoutine } from '../../lib/companionStatus';
 import { getCurrentActivity } from '../../lib/companionStatus';
+import type { AbilityEffect } from '../../data/abilities';
 
 export type TeachingArchetype =
   | 'professor'
@@ -27,6 +28,8 @@ export interface PromptContext {
   relationshipStats: RelationshipStats;
   knownVocab: string[];
   targetLevel: string;
+  /** Effects of currently-toggled-on global ability passives (see data/abilities.ts). Applies regardless of which companion unlocked them. */
+  enabledEffects: AbilityEffect[];
 }
 
 export interface VocabIntroduced {
@@ -61,16 +64,44 @@ export interface CompanionReply {
 /**
  * How much teaching detail a companion is asked to fill in per word, based
  * on rarity - this is the "rarity makes you a better teacher, not a
- * stronger unit" idea from the design doc.
+ * stronger unit" idea from the design doc. forceDeep overrides this to
+ * max depth regardless of rarity - that's what the "Deep Teaching" global
+ * ability (unlocked via Aoi) does once toggled on.
  */
-function teachingDepthInstruction(rarity: Rarity): string {
-  if (rarity >= 5) {
+function teachingDepthInstruction(rarity: Rarity, forceDeep: boolean): string {
+  if (forceDeep || rarity >= 5) {
     return 'For every word in vocab_introduced, fill in nuance (how it differs from a near-synonym), mnemonic (a genuinely useful memory hook), and 2-4 related_words. Go deep - this is your specialty.';
   }
   if (rarity === 4) {
     return 'For every word in vocab_introduced, fill in nuance with a short, useful contrast or usage note. Leave mnemonic as an empty string and related_words as an empty array unless one comes naturally.';
   }
   return 'Keep vocab_introduced entries brief: word, reading, and meaning only. Leave nuance and mnemonic as empty strings and related_words as an empty array.';
+}
+
+/**
+ * Extra instructions injected when the player has toggled on global
+ * ability passives (see data/abilities.ts). These apply on top of
+ * whatever the companion would normally do, regardless of which companion
+ * originally unlocked them.
+ */
+function abilityInstructions(effects: AbilityEffect[]): string[] {
+  const lines: string[] = [];
+  if (effects.includes('register_radar')) {
+    lines.push(
+      "Register Radar (unlocked via Rin): in each word's nuance, note its register - casual/slang, neutral, or formal/written - even briefly.",
+    );
+  }
+  if (effects.includes('context_booster')) {
+    lines.push(
+      "Context Booster (unlocked via Sora): in each word's mnemonic, include a short real-world example sentence using it.",
+    );
+  }
+  if (effects.includes('kanji_breakdown')) {
+    lines.push(
+      "Detective's Case File (unlocked via Yui): for any word containing kanji, add a brief radical/component breakdown to its mnemonic.",
+    );
+  }
+  return lines;
 }
 
 /**
@@ -91,6 +122,12 @@ export function buildSystemPrompt(
 
   const stats = ctx.relationshipStats;
   const currentActivity = getCurrentActivity(persona.dailyRoutine);
+  const forceDeep = ctx.enabledEffects.includes('deep_teaching');
+  const extraAbilityLines = abilityInstructions(ctx.enabledEffects);
+  const abilitiesBlock =
+    extraAbilityLines.length > 0
+      ? `\n\nACTIVE LEARNING TOOLS (unlocked account-wide, apply these regardless of your own specialty):\n${extraAbilityLines.map((l) => `- ${l}`).join('\n')}`
+      : '';
 
   return `You are ${persona.displayName}, an AI companion in the Kotoba no Kizuna Japanese-learning academy.
 
@@ -105,7 +142,9 @@ RELATIONSHIP (0-100 each): trust ${stats.trust}, respect ${stats.respect}, comfo
 
 LEARNER LEVEL: The player is roughly ${ctx.targetLevel}. ${vocabLine}
 
-TEACHING DEPTH: ${teachingDepthInstruction(persona.rarity)}
+TEACHING DEPTH: ${teachingDepthInstruction(persona.rarity, forceDeep)}${abilitiesBlock}
+
+LANGUAGE RULE: "speech" is your in-character line and should be mostly Japanese (a little English mixed in is fine if it suits your personality). Every other text field - "translation", "meaning", "nuance", and "mnemonic" - must be written entirely in English, for a learner who cannot yet read Japanese explanations. Do not write Japanese script anywhere in those fields, not even a single word alongside its English gloss. For example, for the word 猫: meaning should read "cat", never "cat (猫)" or "ねこ - cat".
 
 RESPONSE FORMAT: Reply with ONLY a single valid JSON object - no markdown code fences, no commentary outside the JSON - matching exactly this shape:
 {
