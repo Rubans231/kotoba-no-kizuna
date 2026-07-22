@@ -13,22 +13,56 @@ Runs fully offline against your own local model - nothing is sent to a hosted AP
 
 ## Checkpoint status (see build log in chat / commit message)
 
-This is the **"Phase 2 relationship depth" checkpoint**, built on top of the
-Phase 1 economy checkpoint. Companions now track seven relationship
-dimensions (trust, respect, comfort, friendship, affection, study
-compatibility, shared memories) instead of one affection number, the model
-is asked to move only the 1-2 dimensions that actually make sense per turn,
-and every companion has a daily routine that changes what she's "doing"
-based on real time of day and feeds into her dialogue.
+Current state, in order of what landed:
 
-Frontend is verified: `npm run build` and `npx oxlint` both pass clean, the
-gacha pull/pity logic was smoke-tested directly (2000 simulated pulls landed
-at roughly the expected rarity distribution), and the relationship stat math
-was smoke-tested too (deltas accumulate correctly, clamping to 0-100 holds
-under repeated overshoot).
-The Rust/Tauri side still hasn't been compiled in this environment (no Rust
-toolchain available here) — run `cargo check` inside `src-tauri` and report
-back anything that doesn't build.
+1. **Rust wouldn't compile** - `lindera-tokenizer = "0.34.0"` never existed
+   (that split-crate family is deprecated, frozen at 0.32.3). Migrated to
+   the maintained unified `lindera` crate (4.x) - `Segmenter` + `Tokenizer`
+   + `load_dictionary("embedded://ipadic")`. This has been compiled and run
+   successfully (there's a real `Cargo.lock` to prove it).
+2. **Blank screen after summoning a companion, and chat's top/bottom bars
+   requiring a scroll to reach** - both were the same root cause: leftover
+   Vite-template CSS on `#root` used `min-height` instead of a bounded
+   `height`, so long content grew the whole page instead of scrolling
+   internally, carrying the nav bar and chat composer off-screen with it.
+   Fixed the height chain end-to-end (`index.css`, `App.tsx`, `ChatPanel.tsx`)
+   and added a "Chat now" button on freshly-pulled companions plus a
+   defensive auto-recovery if the active companion ever points at nothing.
+3. **Review cards only showed the bare word** - rebuilt as a real flip-card:
+   word first, "Show Answer" reveals reading/meaning/nuance/mnemonic/related
+   words, *then* you grade. Needed a new `vocab_dictionary` table (migration
+   4) since that teaching detail wasn't persisted anywhere queryable before.
+4. **"migration N was previously applied but is missing"** - not an app bug;
+   see Troubleshooting below for why, plus a reset script.
+5. **Teaching replies sometimes drifted into pure Japanese for fields meant
+   to be English** (a known weakness in some local models' multilingual
+   instruction-following, not unique to this app). Rather than just asking
+   more firmly, the GBNF grammar (`src-tauri/src/ai/client.rs`) now
+   physically excludes Japanese Unicode ranges (hiragana, katakana, CJK
+   ideographs, fullwidth forms) from `translation`/`meaning`/`nuance`/
+   `mnemonic` at the character-sampling level - the model is incapable of
+   emitting Japanese there regardless of model quality. `speech`/`word`/
+   `reading`/`related_words` are untouched since those should contain
+   Japanese.
+6. **Abilities system** - one signature global passive per companion
+   (`src/data/abilities.ts`), unlocked permanently by owning her and
+   reaching a bond level, then toggleable on/off. Unlocking one applies its
+   effect to *every* companion's teaching, not just hers. New Abilities tab
+   with progress bars and toggles, plus a nav badge for unseen unlocks.
+
+Frontend is verified: `npm run build` and `npx oxlint` both pass clean. The
+ability unlock logic (ownership + bond-level gating, no double-unlocking)
+was smoke-tested directly against several companion/level combinations.
+The GBNF grammar was checked with a hand-written structural validator
+(rule references resolve, brackets/quotes balance) since no llama.cpp
+grammar parser is available in this environment - worth a real test run
+against llama-server to confirm the language restriction behaves as
+intended in practice.
+The Rust side compiles and runs (per the working `Cargo.lock`) as of the
+lindera migration; the newer changes in `main.rs`/`client.rs` since then
+(migrations 4-5, the grammar rewrite) have not been separately re-verified
+with a fresh `cargo build` in this environment - that's still worth doing
+after pulling this.
 
 ## Setup
 
@@ -65,8 +99,35 @@ Just restart llama-server with the new `-m` path and the app picks it up on
 the next message - no rebuild.
 
 The SQLite database (`kotoba.db`) is created automatically on first launch
-and the schema in `src-tauri/migrations/001_init_schema.sql` is applied via
-Tauri's migration runner.
+and the schema in `src-tauri/migrations/001_init_schema.sql` (plus later
+numbered migration files) is applied via Tauri's migration runner.
+
+### Troubleshooting
+
+**"migration N was previously applied but is missing in the resolved
+migrations"** — this means the db file on disk has a migration recorded as
+applied that the currently-running code doesn't register. The important
+thing to know: `kotoba.db` does **not** live in this project folder. It
+lives in your OS's app-config directory, keyed by the app identifier in
+`tauri.conf.json` (`com.rubans231.kotobanokizuna`):
+
+- Linux: `~/.config/com.rubans231.kotobanokizuna/kotoba.db`
+- macOS: `~/Library/Application Support/com.rubans231.kotobanokizuna/kotoba.db`
+- Windows: `%APPDATA%\com.rubans231.kotobanokizuna\kotoba.db`
+
+That means it persists across git checkouts, branches, and patches. If you
+ever run a build whose migrations list doesn't match what an earlier run
+recorded (jumping to an older commit, or a patch conflict that silently
+dropped a `Migration { ... }` entry from `main.rs`), the plugin refuses to
+start rather than guess. During active development this is expected and
+low-stakes — it's a throwaway dev database — so the fix is just to delete
+it and let it rebuild fresh from the current migrations:
+
+```bash
+./scripts/reset-dev-db.sh
+```
+
+(Windows: delete the `kotoba.db` file at the path above manually.)
 
 ## What's actually implemented right now
 
@@ -85,9 +146,26 @@ Tauri's migration runner.
   to always reply in structured JSON, including per-word nuance/mnemonic/
   related-word fields that a companion is instructed to fill in more or less
   based on her rarity — the "rarity makes you a better teacher, not a
-  stronger unit" idea from the design doc.
+  stronger unit" idea from the design doc. `translation`/`meaning`/`nuance`/
+  `mnemonic` are further constrained to a character class that excludes
+  Japanese Unicode ranges entirely, so those fields can't drift into
+  Japanese regardless of model quality — `speech`/`word`/`reading`/
+  `related_words` are left unrestricted since those should contain Japanese.
 - SRS engine (`src/features/language-engine/utils/srsAlgorithm.ts`) — SM-2,
-  wired into a review screen (`src/features/srs/`).
+  wired into a proper flip-card review screen (`src/features/srs/`): word
+  first, "Show Answer" reveals reading/meaning/nuance/mnemonic/related
+  words from the new vocab dictionary, then you grade based on actual
+  recall. Higher-rarity companions re-teaching an already-known word will
+  fill in nuance/mnemonic that a lower-rarity companion left blank, without
+  ever overwriting existing detail with blanker data.
+- **Abilities** (`src/data/abilities.ts`, `src/features/abilities/`,
+  `src/lib/abilityUnlocks.ts`) — one signature global passive per companion,
+  unlocked permanently by owning her and reaching a bond level, then
+  toggleable on/off. Unlocking one applies its effect to every companion's
+  teaching, not just hers (e.g. Aoi's "Deep Teaching" forces max teaching
+  depth account-wide once toggled on). New Abilities tab shows locked
+  abilities with a bond-level progress bar, unlocked ones with a toggle, and
+  the main nav gets a badge dot when there's an unseen unlock.
 - **Daily commissions** (`src/features/commissions/`) — 3 daily tasks (talk,
   learn 3 words, review 10 cards) that award gems on completion/claim.
 - **Gacha** (`src/features/gacha/`, `src/lib/gacha.ts`) — a real weighted
