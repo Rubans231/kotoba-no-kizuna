@@ -6,6 +6,7 @@ export interface UserProfile {
   accountLevel: number;
   experiencePoints: number;
   unlockedAbilities: string[];
+  enabledAbilities: string[];
   gems: number;
   pityCounter: number;
   createdAt: string;
@@ -50,4 +51,15 @@ export interface SrsRecord {
   repetitions: number;
   nextReviewTime: string;
   lastReviewTime: string | null;
+}
+
+export interface VocabDictionaryEntry {
+  word: string;
+  reading: string;
+  meaning: string;
+  nuance: string;
+  mnemonic: string;
+  relatedWords: string[];
+  taughtByCharacterId: string;
+  firstTaughtAt: string;
 }
