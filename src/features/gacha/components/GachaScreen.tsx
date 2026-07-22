@@ -6,6 +6,7 @@ import { pullMany, DUPLICATE_REFUND_RATE } from '../../../lib/gacha';
 import type { PullResult } from '../../../lib/gacha';
 import { upsertCompanion, saveProfile } from '../../../lib/db';
 import { defaultRelationshipStats } from '../../../lib/relationship';
+import { checkForNewUnlocks } from '../../../lib/abilityUnlocks';
 
 const RARITY_COLOR: Record<number, string> = {
   3: '#8ab4f8',
@@ -20,6 +21,10 @@ export function GachaScreen() {
   const addGems = useBoundStore((s) => s.addGems);
   const setPityCounter = useBoundStore((s) => s.setPityCounter);
   const setCompanions = useBoundStore((s) => s.setCompanions);
+  const setActiveCompanion = useBoundStore((s) => s.setActiveCompanion);
+  const setActiveTab = useBoundStore((s) => s.setActiveTab);
+  const unlockAbility = useBoundStore((s) => s.unlockAbility);
+  const setHasUnseenAbilityUnlock = useBoundStore((s) => s.setHasUnseenAbilityUnlock);
 
   const [lastResults, setLastResults] = useState<PullResult[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -74,7 +79,16 @@ export function GachaScreen() {
     setCompanions(newInstances);
 
     const updatedProfile = useBoundStore.getState().profile;
-    if (updatedProfile) void saveProfile(updatedProfile);
+    if (updatedProfile) {
+      const companionsMap = useBoundStore.getState().companions;
+      const newlyUnlocked = checkForNewUnlocks(companionsMap, updatedProfile.unlockedAbilities);
+      if (newlyUnlocked.length > 0) {
+        for (const abilityId of newlyUnlocked) unlockAbility(abilityId);
+        setHasUnseenAbilityUnlock(true);
+      }
+      const finalProfile = useBoundStore.getState().profile;
+      if (finalProfile) void saveProfile(finalProfile);
+    }
   };
 
   return (
@@ -130,6 +144,27 @@ export function GachaScreen() {
                   <div style={{ fontSize: 11, color: '#ffd166', marginTop: 4 }}>
                     Dupe (+{Math.round(STANDARD_BANNER.costPerPull * DUPLICATE_REFUND_RATE)}g)
                   </div>
+                )}
+                {!r.isDuplicate && (
+                  <button
+                    onClick={() => {
+                      setActiveCompanion(`inst_${r.characterId}`);
+                      setActiveTab('chat');
+                    }}
+                    style={{
+                      marginTop: 6,
+                      width: '100%',
+                      padding: '4px 0',
+                      borderRadius: 6,
+                      border: 'none',
+                      background: '#007acc',
+                      color: '#fff',
+                      fontSize: 11,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Chat now
+                  </button>
                 )}
               </div>
             );
