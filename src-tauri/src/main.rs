@@ -62,6 +62,18 @@ fn main() {
             sql: include_str!("../migrations/003_relationship_depth.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 4,
+            description: "vocab_dictionary",
+            sql: include_str!("../migrations/004_vocab_dictionary.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 5,
+            description: "abilities",
+            sql: include_str!("../migrations/005_abilities.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
