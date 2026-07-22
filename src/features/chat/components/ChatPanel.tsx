@@ -80,6 +80,7 @@ export function ChatPanel({ instanceId }: ChatPanelProps) {
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
+        minHeight: 0,
         maxWidth: 640,
         margin: '0 auto',
       }}
@@ -95,6 +96,7 @@ export function ChatPanel({ instanceId }: ChatPanelProps) {
           color: 'inherit',
           cursor: 'pointer',
           width: '100%',
+          flexShrink: 0,
         }}
       >
         <div>
@@ -108,11 +110,16 @@ export function ChatPanel({ instanceId }: ChatPanelProps) {
         </div>
       </button>
 
-      {showBond && <RelationshipBars stats={instance.relationshipStats} />}
+      {showBond && (
+        <div style={{ flexShrink: 0 }}>
+          <RelationshipBars stats={instance.relationshipStats} />
+        </div>
+      )}
 
       <div
         style={{
           flex: 1,
+          minHeight: 0,
           overflowY: 'auto',
           padding: 16,
           display: 'flex',
@@ -149,9 +156,9 @@ export function ChatPanel({ instanceId }: ChatPanelProps) {
         )}
       </div>
 
-      {error && <div style={{ color: '#ff6b6b', padding: '0 16px 8px' }}>{error}</div>}
+      {error && <div style={{ color: '#ff6b6b', padding: '0 16px 8px', flexShrink: 0 }}>{error}</div>}
 
-      <div style={{ display: 'flex', gap: 8, padding: 16, borderTop: '1px solid #333' }}>
+      <div style={{ display: 'flex', gap: 8, padding: 16, borderTop: '1px solid #333', flexShrink: 0 }}>
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
