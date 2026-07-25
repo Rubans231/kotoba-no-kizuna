@@ -49,20 +49,28 @@ Current state, in order of what landed:
    reaching a bond level, then toggleable on/off. Unlocking one applies its
    effect to *every* companion's teaching, not just hers. New Abilities tab
    with progress bars and toggles, plus a nav badge for unseen unlocks.
+7. **Random banner** - a separate acquisition path from the curated
+   Standard/Special gacha: a roulette pull (1-in-6 hit chance, 68/25/7 split
+   across 3/4/5-star given a hit) that, on a hit, generates a brand-new
+   companion via the local model rather than drawing from a fixed pool -
+   genuinely unique per player. Second currency (shards), roster cap with
+   discard/wager-to-reroll options once full.
 
-Frontend is verified: `npm run build` and `npx oxlint` both pass clean. The
-ability unlock logic (ownership + bond-level gating, no double-unlocking)
-was smoke-tested directly against several companion/level combinations.
-The GBNF grammar was checked with a hand-written structural validator
-(rule references resolve, brackets/quotes balance) since no llama.cpp
-grammar parser is available in this environment - worth a real test run
-against llama-server to confirm the language restriction behaves as
-intended in practice.
+Frontend is verified: `npm run build` and `npx oxlint` both pass clean.
+Ability unlock logic (ownership + bond-level gating, no double-unlocking)
+and the roulette odds (300k+ simulated pulls landing within statistical
+noise of the specified 1/6, 68%, 25%, 7% targets) were both smoke-tested
+directly, not just written and assumed correct. Both GBNF grammars were
+checked with a hand-written structural validator (rule references resolve,
+brackets/quotes balance) since no llama.cpp grammar parser is available in
+this environment - worth a real test run against llama-server to confirm
+the language restriction and character generation behave as intended in
+practice.
 The Rust side compiles and runs (per the working `Cargo.lock`) as of the
 lindera migration; the newer changes in `main.rs`/`client.rs` since then
-(migrations 4-5, the grammar rewrite) have not been separately re-verified
-with a fresh `cargo build` in this environment - that's still worth doing
-after pulling this.
+(migrations 4-6, the grammar rewrite, the character-generation endpoint)
+have not been separately re-verified with a fresh `cargo build` in this
+environment - that's still worth doing after pulling this.
 
 ## Setup
 
@@ -166,11 +174,31 @@ it and let it rebuild fresh from the current migrations:
   depth account-wide once toggled on). New Abilities tab shows locked
   abilities with a bond-level progress bar, unlocked ones with a toggle, and
   the main nav gets a badge dot when there's an unseen unlock.
+- **Random banner** (`src/features/randomBanner/`, `src/lib/randomBanner.ts`,
+  `src/lib/characterGenerator.ts`) — a separate acquisition path from the
+  curated Standard/Special gacha. Pull mechanic is a roulette: 1-in-6 chance
+  of any character, and given a hit, 68%/25%/7% split across 3/4/5-star
+  (verified against 300k simulated pulls). Every hit invents a brand-new,
+  never-before-seen companion via the local model (name, personality,
+  archetype, teaching philosophy, daily routine, and a visual design prompt
+  saved for a future art-gen pipeline) — genuinely unique per player, not
+  drawn from a fixed pool. Costs a second, cheaper currency (**shards**,
+  separate from gems) so it doesn't compete with the curated banners'
+  economy. Roster is capped (12 by default) since an unbounded number of
+  characters becomes unmanageable; once full, you either **discard** a
+  random companion outright or **wager** her on one more spin - win and
+  she's replaced by a fresh mystery character, lose and she's gone. Random
+  characters are fully chattable (same chat/SRS/relationship systems as the
+  curated cast) via a persona resolver that looks in both the static roster
+  and the generated one - but they don't have abilities, since those are
+  tied to the four named curated companions specifically.
 - **Daily commissions** (`src/features/commissions/`) — 3 daily tasks (talk,
   learn 3 words, review 10 cards) that award gems on completion/claim.
 - **Gacha** (`src/features/gacha/`, `src/lib/gacha.ts`) — a real weighted
   pull (70/25/5 by rarity) with hard pity at 10 pulls and duplicate refunds,
-  against a roster you can extend by adding entries to `companions.ts`.
+  against a roster you can extend by adding entries to `companions.ts`. This
+  is the curated Standard banner - kept deliberately separate from the
+  Random banner above.
 - **Relationship depth** (`src/lib/relationship.ts`,
   `src/features/chat/components/RelationshipBars.tsx`) — seven tracked
   dimensions per companion (trust, respect, comfort, friendship, affection,
@@ -185,13 +213,29 @@ it and let it rebuild fresh from the current migrations:
 - The original NLP tokenizer sandbox (Rust `lindera` + IPADIC) is kept as a
   "sandbox" tab — useful for testing Japanese tokenization directly.
 
-## Next phases (not built yet)
+## Roadmap
 
-1. Events (seasonal banners/stories) and outfits — see the See-through /
-   StretchyStudio discussion for the current art pipeline plan.
-2. Reading/listening toolkit (hover dictionary, sentence mining) — reuses
+1. **Rotating shop** - same procedural character pool as the Random banner,
+   but a small curated selection refreshed daily (low rarity) / weekly (high
+   rarity) for direct purchase instead of RNG pulls.
+2. **AI-generated character art** - a Rust HTTP client analogous to the
+   llama-server integration, hitting a local ComfyUI instance with the
+   `visual_design_prompt` already being generated and saved per character,
+   using the Hoseki LustrousMix Anima checkpoint. Not started, and can't be
+   tested in the environment this was built in (no GPU, no reachable
+   ComfyUI/civitai) - the Rust side can be written following the existing
+   local-server pattern, but needs real testing on a machine that has
+   ComfyUI running.
+3. Events (seasonal banners/stories) and outfits — see the See-through /
+   StretchyStudio discussion for the art pipeline plan there too.
+4. Reading/listening toolkit (hover dictionary, sentence mining) — reuses
    the tokenizer that's already there.
-3. A real animated companion — see the "Live2D" discussion for the current
+5. A real animated companion — see the "Live2D" discussion for the current
    plan (procedural layer animation first, real rigging later).
-4. Desktop assistant overlay (OCR, clipboard translation) — leverages the
+6. Desktop assistant overlay (OCR, clipboard translation) — leverages the
    fact this is already a native Tauri app.
+7. **Adventure gacha** (mid-term) - a Red Light/Green Light + dice-driven
+   event run as an alternate pull mechanic, with power-ups and hazards along
+   the way.
+8. **Living worlds** (far future) - 3D character/environment generation with
+   auto-rigging, for real-time interactive bonding.
