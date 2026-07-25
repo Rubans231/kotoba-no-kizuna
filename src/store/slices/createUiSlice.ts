@@ -1,6 +1,6 @@
 import type { StateCreator } from 'zustand';
 
-export type AppTab = 'chat' | 'review' | 'commissions' | 'gacha' | 'abilities' | 'sandbox';
+export type AppTab = 'chat' | 'review' | 'commissions' | 'gacha' | 'random' | 'abilities' | 'sandbox';
 
 export interface UiSlice {
   activeTab: AppTab;

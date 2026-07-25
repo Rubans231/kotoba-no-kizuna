@@ -8,6 +8,7 @@ export interface CompanionSlice {
   activeCompanionId: string | null;
   setCompanions: (list: CompanionInstance[]) => void;
   setActiveCompanion: (instanceId: string | null) => void;
+  removeCompanion: (instanceId: string) => void;
   updateAffection: (instanceId: string, xpGain: number) => void;
   updateRelationshipStats: (
     instanceId: string,
@@ -22,6 +23,13 @@ export const createCompanionSlice: StateCreator<CompanionSlice> = (set) => ({
     companions: list.reduce((acc, curr) => ({ ...acc, [curr.instanceId]: curr }), {})
   }),
   setActiveCompanion: (instanceId) => set({ activeCompanionId: instanceId }),
+  removeCompanion: (instanceId) => set((state) => {
+    const { [instanceId]: _removed, ...rest } = state.companions;
+    return {
+      companions: rest,
+      activeCompanionId: state.activeCompanionId === instanceId ? null : state.activeCompanionId,
+    };
+  }),
   updateAffection: (instanceId, xpGain) => set((state) => {
     const target = state.companions[instanceId];
     if (!target) return {};
