@@ -20,6 +20,26 @@ digit ::= [0-9]
 ws ::= [ \t\n]*
 "#;
 
+// Grammar for procedurally generating a brand-new companion persona (used by
+// the Random banner / rotating shop). Rarity is NOT part of the model's
+// output - our own code decides rarity before calling this (it has real
+// game-mechanical weight via teaching depth), and only passes it into the
+// prompt as a flavor hint. display_name and archetype get the permissive
+// `string`/fixed-enum treatment; everything else the player would read as
+// an explanation is restricted to the same Japanese-script-free
+// english-string rule used above, for the same reason (local models drift
+// into Japanese in fields that should be plain English).
+const CHARACTER_GRAMMAR: &str = r#"
+root ::= "{" ws "\"display_name\":" ws string "," ws "\"archetype\":" ws archetype "," ws "\"specialty\":" ws english-string "," ws "\"personality\":" ws english-string "," ws "\"teaching_philosophy\":" ws english-string "," ws "\"speech_style\":" ws english-string "," ws "\"daily_routine_morning\":" ws english-string "," ws "\"daily_routine_afternoon\":" ws english-string "," ws "\"daily_routine_evening\":" ws english-string "," ws "\"daily_routine_late_night\":" ws english-string "," ws "\"visual_design_prompt\":" ws english-string ws "}"
+archetype ::= "\"professor\"" | "\"big_sister\"" | "\"detective\"" | "\"idol\"" | "\"historian\""
+string ::= "\"" string-char* "\""
+string-char ::= [^"\\\x00-\x1F] | "\\" (["\\/bfnrt] | "u" hex hex hex hex)
+english-string ::= "\"" english-char* "\""
+english-char ::= [^"\\\x00-\x1F\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uFF00-\uFFEF] | "\\" ["\\/bfnrt]
+hex ::= [0-9a-fA-F]
+ws ::= [ \t\n]*
+"#;
+
 #[derive(Serialize)]
 struct ChatMessage {
     role: String,
@@ -50,10 +70,11 @@ struct ChatCompletionResponse {
     choices: Vec<ChatChoice>,
 }
 
-/// Sends one turn of conversation to a local, OpenAI-compatible chat
-/// completions endpoint (llama-server, Ollama, LM Studio, etc.) and returns
-/// the model's text reply. `history` is a list of (role, content) pairs
-/// where role is "user" or "assistant".
+/// Shared HTTP call to a local, OpenAI-compatible chat completions endpoint
+/// (llama-server, Ollama, LM Studio, etc). `messages` is the full message
+/// list (including any system message) - callers build it however suits
+/// them. `grammar` is whichever GBNF grammar constrains this particular
+/// call's output shape.
 ///
 /// Configured via env vars, all optional:
 ///   LOCAL_LLM_BASE_URL - default "http://localhost:8080" (llama-server default)
@@ -61,10 +82,10 @@ struct ChatCompletionResponse {
 ///                         and just uses whatever's loaded; some other
 ///                         servers, e.g. Ollama, require the real model name)
 ///   LOCAL_LLM_API_KEY   - only needed if you started llama-server with --api-key
-pub async fn send_message(
-    system_prompt: &str,
-    history: Vec<(String, String)>,
-    user_message: &str,
+async fn call_local_llm(
+    messages: Vec<ChatMessage>,
+    grammar: &str,
+    temperature: f32,
 ) -> Result<String, String> {
     let base_url = std::env::var("LOCAL_LLM_BASE_URL")
         .unwrap_or_else(|_| "http://localhost:8080".to_string());
@@ -73,25 +94,11 @@ pub async fn send_message(
 
     let client = reqwest::Client::new();
 
-    let mut messages = vec![ChatMessage {
-        role: "system".to_string(),
-        content: system_prompt.to_string(),
-    }];
-    messages.extend(
-        history
-            .into_iter()
-            .map(|(role, content)| ChatMessage { role, content }),
-    );
-    messages.push(ChatMessage {
-        role: "user".to_string(),
-        content: user_message.to_string(),
-    });
-
     let body = ChatRequest {
         model,
         messages,
-        grammar: REPLY_GRAMMAR.to_string(),
-        temperature: 0.8,
+        grammar: grammar.to_string(),
+        temperature,
         max_tokens: 1024,
     };
 
@@ -102,9 +109,7 @@ pub async fn send_message(
     }
 
     let res = req.send().await.map_err(|e| {
-        format!(
-            "Couldn't reach the local model server at {url}: {e}. Is llama-server running?"
-        )
+        format!("Couldn't reach the local model server at {url}: {e}. Is llama-server running?")
     })?;
 
     if !res.status().is_success() {
@@ -124,4 +129,49 @@ pub async fn send_message(
         .next()
         .map(|c| c.message.content)
         .ok_or_else(|| "Local model server returned no choices".to_string())
+}
+
+/// Sends one turn of conversation and returns the model's text reply.
+/// `history` is a list of (role, content) pairs where role is "user" or
+/// "assistant".
+pub async fn send_message(
+    system_prompt: &str,
+    history: Vec<(String, String)>,
+    user_message: &str,
+) -> Result<String, String> {
+    let mut messages = vec![ChatMessage {
+        role: "system".to_string(),
+        content: system_prompt.to_string(),
+    }];
+    messages.extend(
+        history
+            .into_iter()
+            .map(|(role, content)| ChatMessage { role, content }),
+    );
+    messages.push(ChatMessage {
+        role: "user".to_string(),
+        content: user_message.to_string(),
+    });
+
+    call_local_llm(messages, REPLY_GRAMMAR, 0.8).await
+}
+
+/// Generates a brand-new companion persona (for the Random banner / rotating
+/// shop). Returns the raw JSON string matching CHARACTER_GRAMMAR's shape;
+/// the caller (TS side) parses it and assigns the rarity that was already
+/// decided before this was called. Higher temperature than chat replies -
+/// we want variety across generations, not consistency with a character.
+pub async fn generate_character(system_prompt: &str) -> Result<String, String> {
+    let messages = vec![
+        ChatMessage {
+            role: "system".to_string(),
+            content: system_prompt.to_string(),
+        },
+        ChatMessage {
+            role: "user".to_string(),
+            content: "Generate the character now.".to_string(),
+        },
+    ];
+
+    call_local_llm(messages, CHARACTER_GRAMMAR, 1.05).await
 }

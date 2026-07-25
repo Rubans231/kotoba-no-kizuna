@@ -1,12 +1,12 @@
 import { useCallback, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useBoundStore } from '../../../store/useBoundStore';
-import { COMPANIONS } from '../../../data/companions';
 import { buildSystemPrompt } from '../../../core/types/companion';
 import type { CompanionReply } from '../../../core/types/companion';
 import { appendConversationLog, upsertSrsRecord, upsertCompanion, upsertCommission, upsertVocabDictionaryEntry, saveProfile } from '../../../lib/db';
 import { ABILITY_DEFINITIONS } from '../../../data/abilities';
 import { checkForNewUnlocks } from '../../../lib/abilityUnlocks';
+import { resolvePersona } from '../../../lib/personaResolver';
 
 export function useCompanionChat(instanceId: string) {
   const [isSending, setIsSending] = useState(false);
@@ -32,7 +32,7 @@ export function useCompanionChat(instanceId: string) {
         setError('No active companion instance.');
         return;
       }
-      const persona = COMPANIONS[instance.characterId];
+      const persona = resolvePersona(instance.characterId, useBoundStore.getState().proceduralCharacters);
       if (!persona) {
         setError(`Unknown persona for character ${instance.characterId}`);
         return;

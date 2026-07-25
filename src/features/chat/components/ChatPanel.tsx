@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useBoundStore } from '../../../store/useBoundStore';
 import { useCompanionChat } from '../hooks/useCompanionChat';
-import { COMPANIONS } from '../../../data/companions';
+import { usePersona } from '../../../lib/personaResolver';
 import type { VocabIntroduced } from '../../../core/types/companion';
 import { getCurrentActivity } from '../../../lib/companionStatus';
 import { overallBondLevel } from '../../../lib/relationship';
@@ -62,10 +62,11 @@ export function ChatPanel({ instanceId }: ChatPanelProps) {
   const [showBond, setShowBond] = useState(false);
   const instance = useBoundStore((s) => s.companions[instanceId]);
   const messages = useBoundStore((s) => s.conversations[instanceId] || []);
+  const persona = usePersona(instance?.characterId ?? '');
   const { sendMessage, isSending, error } = useCompanionChat(instanceId);
 
   if (!instance) return <div style={{ padding: 24, color: '#888' }}>Loading companion...</div>;
-  const persona = COMPANIONS[instance.characterId];
+  if (!persona) return <div style={{ padding: 24, color: '#888' }}>Loading persona...</div>;
 
   const handleSend = async () => {
     if (!draft.trim() || isSending) return;

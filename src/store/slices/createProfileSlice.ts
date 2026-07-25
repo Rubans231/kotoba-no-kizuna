@@ -9,6 +9,8 @@ export interface ProfileSlice {
   toggleAbility: (abilityId: string) => void;
   addGems: (amount: number) => void;
   spendGems: (amount: number) => boolean;
+  addShards: (amount: number) => void;
+  spendShards: (amount: number) => boolean;
   setPityCounter: (value: number) => void;
 }
 
@@ -63,6 +65,16 @@ export const createProfileSlice: StateCreator<ProfileSlice> = (set, get) => ({
     const profile = get().profile;
     if (!profile || profile.gems < amount) return false;
     set({ profile: { ...profile, gems: profile.gems - amount } });
+    return true;
+  },
+  addShards: (amount) => set((state) => {
+    if (!state.profile) return {};
+    return { profile: { ...state.profile, shards: state.profile.shards + amount } };
+  }),
+  spendShards: (amount) => {
+    const profile = get().profile;
+    if (!profile || profile.shards < amount) return false;
+    set({ profile: { ...profile, shards: profile.shards - amount } });
     return true;
   },
   setPityCounter: (value) => set((state) => {

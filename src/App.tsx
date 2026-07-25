@@ -5,18 +5,19 @@ import { ReviewSession } from './features/srs/components/ReviewSession';
 import { CommissionsPanel } from './features/commissions/components/CommissionsPanel';
 import { GachaScreen } from './features/gacha/components/GachaScreen';
 import { AbilitiesPanel } from './features/abilities/components/AbilitiesPanel';
+import { RandomBannerScreen } from './features/randomBanner/components/RandomBannerScreen';
 import { useBoundStore } from './store/useBoundStore';
 import type { AppTab } from './store/slices/createUiSlice';
 import { COMMISSION_DEFINITIONS, todayKey } from './data/commissions';
-import { COMPANIONS } from './data/companions';
 import { defaultRelationshipStats } from './lib/relationship';
 import { checkForNewUnlocks } from './lib/abilityUnlocks';
+import { resolvePersona } from './lib/personaResolver';
 import * as db from './lib/db';
 
 const DEV_USER_ID = 'usr_dev_test_01';
 const STARTER_CHARACTER_ID = 'rin_slang';
 
-const TABS: AppTab[] = ['chat', 'review', 'commissions', 'gacha', 'abilities', 'sandbox'];
+const TABS: AppTab[] = ['chat', 'review', 'commissions', 'gacha', 'random', 'abilities', 'sandbox'];
 
 function App() {
   const [ready, setReady] = useState(false);
@@ -29,11 +30,13 @@ function App() {
   const setConversation = useBoundStore((s) => s.setConversation);
   const setCommissions = useBoundStore((s) => s.setCommissions);
   const setVocabDictionary = useBoundStore((s) => s.setVocabDictionary);
+  const setProceduralCharacters = useBoundStore((s) => s.setProceduralCharacters);
   const unlockAbility = useBoundStore((s) => s.unlockAbility);
   const hasUnseenAbilityUnlock = useBoundStore((s) => s.hasUnseenAbilityUnlock);
   const setHasUnseenAbilityUnlock = useBoundStore((s) => s.setHasUnseenAbilityUnlock);
   const activeCompanionId = useBoundStore((s) => s.activeCompanionId);
   const companions = useBoundStore((s) => s.companions);
+  const proceduralCharacters = useBoundStore((s) => s.proceduralCharacters);
   const profile = useBoundStore((s) => s.profile);
   const activeTab = useBoundStore((s) => s.activeTab);
   const setActiveTab = useBoundStore((s) => s.setActiveTab);
@@ -51,6 +54,7 @@ function App() {
             unlockedAbilities: [],
             enabledAbilities: [],
             gems: 300,
+            shards: 60,
             pityCounter: 0,
             createdAt: new Date().toISOString(),
           };
@@ -89,6 +93,9 @@ function App() {
 
         const vocabDictionary = await db.loadVocabDictionary();
         setVocabDictionary(vocabDictionary);
+
+        const proceduralCharacters = await db.loadProceduralCharacters();
+        setProceduralCharacters(proceduralCharacters);
 
         // Seed today's commissions if this is the first launch today.
         const today = todayKey();
@@ -213,7 +220,10 @@ function App() {
             </button>
           ))}
         </div>
-        <div style={{ color: '#ffd166', fontSize: 14 }}>{profile?.gems ?? 0} gems</div>
+        <div style={{ display: 'flex', gap: 12, color: '#ffd166', fontSize: 14 }}>
+          <span>{profile?.gems ?? 0} gems</span>
+          <span style={{ color: '#8ab4f8' }}>{profile?.shards ?? 0} shards</span>
+        </div>
       </nav>
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         {activeTab === 'chat' && (
@@ -228,23 +238,26 @@ function App() {
                   flexShrink: 0,
                 }}
               >
-                {Object.values(companions).map((c) => (
-                  <button
-                    key={c.instanceId}
-                    onClick={() => setActiveCompanion(c.instanceId)}
-                    style={{
-                      padding: '5px 12px',
-                      borderRadius: 14,
-                      border: 'none',
-                      fontSize: 12,
-                      background: activeCompanionId === c.instanceId ? '#007acc' : '#2a2a2a',
-                      color: '#fff',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {COMPANIONS[c.characterId]?.displayName ?? c.characterId}
-                  </button>
-                ))}
+                {Object.values(companions).map((c) => {
+                  const label = resolvePersona(c.characterId, proceduralCharacters)?.displayName ?? c.characterId;
+                  return (
+                    <button
+                      key={c.instanceId}
+                      onClick={() => setActiveCompanion(c.instanceId)}
+                      style={{
+                        padding: '5px 12px',
+                        borderRadius: 14,
+                        border: 'none',
+                        fontSize: 12,
+                        background: activeCompanionId === c.instanceId ? '#007acc' : '#2a2a2a',
+                        color: '#fff',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
             )}
             <div style={{ flex: 1, minHeight: 0 }}>
@@ -255,6 +268,7 @@ function App() {
         {activeTab === 'review' && <ReviewSession />}
         {activeTab === 'commissions' && <CommissionsPanel />}
         {activeTab === 'gacha' && <GachaScreen />}
+        {activeTab === 'random' && <RandomBannerScreen />}
         {activeTab === 'abilities' && <AbilitiesPanel />}
         {activeTab === 'sandbox' && <DevSandbox />}
       </div>

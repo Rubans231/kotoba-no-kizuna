@@ -13,6 +13,8 @@ import { createUiSlice } from './slices/createUiSlice';
 import type { UiSlice } from './slices/createUiSlice';
 import { createVocabDictionarySlice } from './slices/createVocabDictionarySlice';
 import type { VocabDictionarySlice } from './slices/createVocabDictionarySlice';
+import { createProceduralCharacterSlice } from './slices/createProceduralCharacterSlice';
+import type { ProceduralCharacterSlice } from './slices/createProceduralCharacterSlice';
 
 type BoundStoreState = ProfileSlice &
   CompanionSlice &
@@ -20,7 +22,8 @@ type BoundStoreState = ProfileSlice &
   ChatSlice &
   CommissionsSlice &
   UiSlice &
-  VocabDictionarySlice;
+  VocabDictionarySlice &
+  ProceduralCharacterSlice;
 
 export const useBoundStore = create<BoundStoreState>()((...a) => ({
   ...createProfileSlice(...a),
@@ -30,4 +33,5 @@ export const useBoundStore = create<BoundStoreState>()((...a) => ({
   ...createCommissionsSlice(...a),
   ...createUiSlice(...a),
   ...createVocabDictionarySlice(...a),
+  ...createProceduralCharacterSlice(...a),
 }));

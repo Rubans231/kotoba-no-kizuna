@@ -7,6 +7,7 @@ import type {
   DailyCommission,
   VocabDictionaryEntry,
 } from '../core/types/database';
+import type { ProceduralCharacterPersona } from '../core/types/proceduralCharacter';
 import { defaultRelationshipStats } from '../lib/relationship';
 
 // Must match the "sqlite:kotoba.db" identifier registered with the
@@ -39,6 +40,7 @@ export async function loadProfile(id: string): Promise<UserProfile | null> {
     unlockedAbilities: JSON.parse(r.unlocked_abilities || '[]'),
     enabledAbilities: JSON.parse(r.enabled_abilities || '[]'),
     gems: r.gems,
+    shards: r.shards,
     pityCounter: r.pity_counter,
     createdAt: r.created_at,
   };
@@ -47,8 +49,8 @@ export async function loadProfile(id: string): Promise<UserProfile | null> {
 export async function saveProfile(p: UserProfile): Promise<void> {
   const db = await getDb();
   await db.execute(
-    `INSERT INTO user_profile (id, username, account_level, experience_points, unlocked_abilities, enabled_abilities, gems, pity_counter)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO user_profile (id, username, account_level, experience_points, unlocked_abilities, enabled_abilities, gems, shards, pity_counter)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        username = excluded.username,
        account_level = excluded.account_level,
@@ -56,6 +58,7 @@ export async function saveProfile(p: UserProfile): Promise<void> {
        unlocked_abilities = excluded.unlocked_abilities,
        enabled_abilities = excluded.enabled_abilities,
        gems = excluded.gems,
+       shards = excluded.shards,
        pity_counter = excluded.pity_counter`,
     [
       p.id,
@@ -65,6 +68,7 @@ export async function saveProfile(p: UserProfile): Promise<void> {
       JSON.stringify(p.unlockedAbilities),
       JSON.stringify(p.enabledAbilities),
       p.gems,
+      p.shards,
       p.pityCounter,
     ],
   );
@@ -124,6 +128,11 @@ export async function upsertCompanion(c: CompanionInstance): Promise<void> {
       JSON.stringify(c.unlockedVoiceLines),
     ],
   );
+}
+
+export async function deleteCompanion(instanceId: string): Promise<void> {
+  const db = await getDb();
+  await db.execute('DELETE FROM companions WHERE instance_id = ?', [instanceId]);
 }
 
 // ---------------------------------------------------------------------------
@@ -288,4 +297,64 @@ export async function upsertVocabDictionaryEntry(entry: VocabDictionaryEntry): P
     `UPDATE vocab_dictionary SET nuance = ?, mnemonic = ?, related_words = ? WHERE word = ?`,
     [mergedNuance, mergedMnemonic, JSON.stringify(mergedRelated), entry.word],
   );
+}
+
+// ---------------------------------------------------------------------------
+// Procedural characters (Random banner / rotating shop)
+// ---------------------------------------------------------------------------
+
+export async function loadProceduralCharacters(): Promise<ProceduralCharacterPersona[]> {
+  const db = await getDb();
+  const rows = await db.select<any[]>('SELECT * FROM procedural_characters', []);
+  return rows.map((r) => ({
+    characterId: r.character_id,
+    displayName: r.display_name,
+    archetype: r.archetype,
+    specialty: r.specialty,
+    rarity: r.rarity,
+    personality: r.personality,
+    teachingPhilosophy: r.teaching_philosophy,
+    speechStyle: r.speech_style,
+    dailyRoutine: {
+      morning: r.daily_routine_morning,
+      afternoon: r.daily_routine_afternoon,
+      evening: r.daily_routine_evening,
+      lateNight: r.daily_routine_late_night,
+    },
+    visualDesignPrompt: r.visual_design_prompt,
+    source: r.source,
+    generatedAt: r.generated_at,
+  }));
+}
+
+export async function saveProceduralCharacter(p: ProceduralCharacterPersona): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `INSERT INTO procedural_characters
+       (character_id, display_name, archetype, specialty, rarity, personality, teaching_philosophy, speech_style,
+        daily_routine_morning, daily_routine_afternoon, daily_routine_evening, daily_routine_late_night,
+        visual_design_prompt, source)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      p.characterId,
+      p.displayName,
+      p.archetype,
+      p.specialty,
+      p.rarity,
+      p.personality,
+      p.teachingPhilosophy,
+      p.speechStyle,
+      p.dailyRoutine.morning,
+      p.dailyRoutine.afternoon,
+      p.dailyRoutine.evening,
+      p.dailyRoutine.lateNight,
+      p.visualDesignPrompt,
+      p.source,
+    ],
+  );
+}
+
+export async function deleteProceduralCharacter(characterId: string): Promise<void> {
+  const db = await getDb();
+  await db.execute('DELETE FROM procedural_characters WHERE character_id = ?', [characterId]);
 }
