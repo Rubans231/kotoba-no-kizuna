@@ -38,6 +38,14 @@ async fn send_chat_message(
     ai::client::send_message(&system_prompt, history_pairs, &user_message).await
 }
 
+/// Generates a brand-new companion persona (Random banner / rotating shop).
+/// Returns the raw JSON string; the frontend parses it and assigns rarity
+/// (which is decided by the pull outcome, not the model).
+#[tauri::command]
+async fn generate_character_concept(system_prompt: String) -> Result<String, String> {
+    ai::client::generate_character(&system_prompt).await
+}
+
 fn main() {
     // Loads src-tauri/.env in dev so ANTHROPIC_API_KEY doesn't need to be
     // exported manually every session. Harmless no-op if the file is absent.
@@ -74,6 +82,12 @@ fn main() {
             sql: include_str!("../migrations/005_abilities.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 6,
+            description: "random_characters",
+            sql: include_str!("../migrations/006_random_characters.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
@@ -87,7 +101,8 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             tokenize_japanese_text,
-            send_chat_message
+            send_chat_message,
+            generate_character_concept
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
