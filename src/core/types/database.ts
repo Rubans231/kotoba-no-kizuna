@@ -8,6 +8,7 @@ export interface UserProfile {
   unlockedAbilities: string[];
   enabledAbilities: string[];
   gems: number;
+  shards: number;
   pityCounter: number;
   createdAt: string;
 }
