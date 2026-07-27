@@ -22,6 +22,14 @@ export interface CompanionPersona {
   teachingPhilosophy: string;
   speechStyle: string;
   dailyRoutine: DailyRoutine;
+  /** Natural-language appearance description for image generation (hair, eyes, outfit, palette). */
+  visualDesignPrompt: string;
+  /** Danbooru-style comma-separated tags (lowercase, spaces not underscores) describing physical traits/outfit - used specifically for LoRA training captions, not image-gen prompting. */
+  visualTags: string;
+  /** Whether her chat background should be dynamic/action "splash art" or calm/ambient "regular art" - decided once per character based on personality. */
+  backgroundStyle: 'splash' | 'regular';
+  /** The actual scene prompt used to generate that background. */
+  backgroundScenePrompt: string;
 }
 
 export interface PromptContext {
