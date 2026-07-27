@@ -1,0 +1,10 @@
+{
+  "_comment": "Anima-T2I.json. Used for the very first character generation (no reference exists yet) and, once a LoRA is trained, for any straightforward generation with lora_tag_node_id.",
+  "workflow_file": "t2i_base.json",
+  "positive_prompt_node_id": "24",
+  "negative_prompt_node_id": "25",
+  "lora_tag_node_id": "26",
+  "output_node_id": "35",
+  "output_filename_node_id": "35",
+  "output_path_node_id": "35"
+}

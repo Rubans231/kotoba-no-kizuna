@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+# Contract this script must follow (see src-tauri/src/ai/lora_training.rs):
+#
+#   train_anima_lora.sh <dataset_dir> <output_dir> <trigger_word>
+#
+#   $1 dataset_dir  - folder of numbered images (001.png, 002.png, ...) each
+#                     with a matching .txt caption file, PLUS a
+#                     dataset_config.toml already written by the app
+#                     (num_repeats pre-computed for the image count).
+#   $2 output_dir   - where the resulting .safetensors should be written.
+#                     Defaults to ComfyUI's models/loras/ directory unless
+#                     overridden (COMFYUI_LORAS_DIR in the app).
+#   $3 trigger_word - the unique token embedded in every caption's first
+#                     segment - also used as the output filename.
+#
+# Prints the final .safetensors path as its last line of stdout on success
+# (the app falls back to scanning output_dir if it doesn't).
+#
+# Requires kohya-ss/sd-scripts cloned somewhere with anima_train_network.py
+# available (this needs the Anima-specific fork/branch with
+# networks.lora_anima - not vanilla train_network.py, which doesn't
+# understand Anima's DiT architecture at all).
+#
+# Fill in SD_SCRIPTS_DIR and the three model paths below for your machine.
+
+set -euo pipefail
+
+DATASET_DIR="$1"
+OUTPUT_DIR="$2"
+TRIGGER_WORD="$3"
+
+# --- Fill these in for your setup -----------------------------------------
+SD_SCRIPTS_DIR="/path/to/sd-scripts"
+ANIMA_DIT_PATH="/path/to/models/anima-aesthetic-v1.1.safetensors"
+QWEN3_PATH="/path/to/models/qwen_3_06b_base.safetensors"
+VAE_PATH="/path/to/models/qwen_image_vae.safetensors"
+# ---------------------------------------------------------------------------
+
+# Anima-Aesthetic was fine-tuned with quality strings stripped from its own
+# training data - the dataset assembly step already omits quality tags
+# accordingly (use_quality_tags=false). Nothing to change here for that;
+# it's baked into the captions already written into DATASET_DIR.
+
+# VRAM tier - pick the one matching your GPU. Override with:
+#   ANIMA_TRAIN_TIER=standard|balanced|low_vram ./train_anima_lora.sh ...
+TIER="${ANIMA_TRAIN_TIER:-balanced}"
+
+case "$TIER" in
+  standard)
+    # 24GB+ VRAM
+    NETWORK_DIM=32
+    NETWORK_ALPHA=16
+    OPTIMIZER_TYPE="AdamW8bit"
+    OPTIMIZER_ARGS=()
+    LEARNING_RATE="1e-4"
+    LR_SCHEDULER="cosine"
+    LR_WARMUP_STEPS=100
+    DISCRETE_FLOW_SHIFT=1.5
+    SIGMOID_SCALE=1.2
+    ;;
+  low_vram)
+    # 12-16GB VRAM
+    NETWORK_DIM=16
+    NETWORK_ALPHA=16
+    OPTIMIZER_TYPE="came_pytorch.CAME"
+    OPTIMIZER_ARGS=("weight_decay=0.02")
+    LEARNING_RATE="5e-4"
+    LR_SCHEDULER="linear"
+    LR_WARMUP_STEPS=0
+    DISCRETE_FLOW_SHIFT=1.0
+    SIGMOID_SCALE=1.0
+    ;;
+  balanced|*)
+    # Default - broadly compatible, memory-efficient adafactor
+    NETWORK_DIM=32
+    NETWORK_ALPHA=16
+    OPTIMIZER_TYPE="adafactor"
+    OPTIMIZER_ARGS=("relative_step=False" "scale_parameter=False" "warmup_init=False")
+    LEARNING_RATE="1e-4"
+    LR_SCHEDULER="constant_with_warmup"
+    LR_WARMUP_STEPS=100
+    DISCRETE_FLOW_SHIFT=1.5
+    SIGMOID_SCALE=1.2
+    ;;
+esac
+
+echo "Training tier: $TIER (network_dim=$NETWORK_DIM, optimizer=$OPTIMIZER_TYPE)" >&2
+
+cd "$SD_SCRIPTS_DIR"
+
+accelerate launch \
+  --mixed_precision="bf16" \
+  --num_cpu_threads_per_process=1 \
+  anima_train_network.py \
+  --pretrained_model_name_or_path="$ANIMA_DIT_PATH" \
+  --qwen3="$QWEN3_PATH" \
+  --vae="$VAE_PATH" \
+  --dataset_config="${DATASET_DIR}/dataset_config.toml" \
+  --output_dir="$OUTPUT_DIR" \
+  --output_name="$TRIGGER_WORD" \
+  --save_model_as="safetensors" \
+  --save_precision="bf16" \
+  --network_module="networks.lora_anima" \
+  --network_dim="$NETWORK_DIM" \
+  --network_alpha="$NETWORK_ALPHA" \
+  --network_train_unet_only \
+  --cache_latents \
+  --cache_text_encoder_outputs \
+  --gradient_checkpointing \
+  --optimizer_type="$OPTIMIZER_TYPE" \
+  ${OPTIMIZER_ARGS[@]:+--optimizer_args "${OPTIMIZER_ARGS[@]}"} \
+  --learning_rate="$LEARNING_RATE" \
+  --lr_scheduler="$LR_SCHEDULER" \
+  --lr_warmup_steps="$LR_WARMUP_STEPS" \
+  --max_train_epochs=10 \
+  --save_every_n_epochs=2 \
+  --timestep_sampling="shift" \
+  --discrete_flow_shift="$DISCRETE_FLOW_SHIFT" \
+  --sigmoid_scale="$SIGMOID_SCALE" \
+  --attn_mode="torch" \
+  --max_data_loader_n_workers=2 \
+  --persistent_data_loader_workers \
+  --seed=42
+
+FINAL_PATH="${OUTPUT_DIR}/${TRIGGER_WORD}.safetensors"
+if [ -f "$FINAL_PATH" ]; then
+  echo "$FINAL_PATH"
+else
+  echo "Training finished but expected output not found at $FINAL_PATH" >&2
+  exit 1
+fi
