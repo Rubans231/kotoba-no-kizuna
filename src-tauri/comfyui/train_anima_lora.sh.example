@@ -6,7 +6,8 @@
 #   $1 dataset_dir  - folder of numbered images (001.png, 002.png, ...) each
 #                     with a matching .txt caption file, PLUS a
 #                     dataset_config.toml already written by the app
-#                     (num_repeats pre-computed for the image count).
+#                     (num_repeats pre-computed for the image count) - do
+#                     NOT regenerate this file here, it's already correct.
 #   $2 output_dir   - where the resulting .safetensors should be written.
 #                     Defaults to ComfyUI's models/loras/ directory unless
 #                     overridden (COMFYUI_LORAS_DIR in the app).
@@ -16,12 +17,17 @@
 # Prints the final .safetensors path as its last line of stdout on success
 # (the app falls back to scanning output_dir if it doesn't).
 #
-# Requires kohya-ss/sd-scripts cloned somewhere with anima_train_network.py
-# available (this needs the Anima-specific fork/branch with
-# networks.lora_anima - not vanilla train_network.py, which doesn't
-# understand Anima's DiT architecture at all).
+# IMPORTANT: LoRA training targets anima-BASE-v1.0, not anima-aesthetic -
+# this matters because the dataset's captions need use_quality_tags=true
+# to match (quality tags were NOT stripped from Base's training data, only
+# from Aesthetic's). Make sure whatever calls assemble_lora_dataset passes
+# use_quality_tags=true when training against Base, matching this script.
+# The trained LoRA is then applied at INFERENCE time against Aesthetic
+# (what the generation workflows use) - LoRAs transfer reasonably between
+# closely-related checkpoint variants of the same architecture.
 #
-# Fill in SD_SCRIPTS_DIR and the three model paths below for your machine.
+# Requires kohya-ss/sd-scripts cloned somewhere with anima_train_network.py
+# available (needs the Anima-specific fork/branch with networks.lora_anima).
 
 set -euo pipefail
 
@@ -29,20 +35,21 @@ DATASET_DIR="$1"
 OUTPUT_DIR="$2"
 TRIGGER_WORD="$3"
 
-# --- Fill these in for your setup -----------------------------------------
+# --- Fill this in for your setup -------------------------------------------
 SD_SCRIPTS_DIR="/path/to/sd-scripts"
-ANIMA_DIT_PATH="/path/to/models/anima-aesthetic-v1.1.safetensors"
-QWEN3_PATH="/path/to/models/qwen_3_06b_base.safetensors"
-VAE_PATH="/path/to/models/qwen_image_vae.safetensors"
 # ---------------------------------------------------------------------------
 
-# Anima-Aesthetic was fine-tuned with quality strings stripped from its own
-# training data - the dataset assembly step already omits quality tags
-# accordingly (use_quality_tags=false). Nothing to change here for that;
-# it's baked into the captions already written into DATASET_DIR.
+# Model paths - these match setup_comfyui.py's download layout
+# (comfyui/models/{diffusion_models,text_encoders,vae}/...). Override
+# COMFYUI_ROOT if your ComfyUI install lives somewhere else.
+COMFYUI_ROOT="${COMFYUI_ROOT:-$HOME/comfy/ComfyUI}"
+ANIMA_DIT_PATH="${COMFYUI_ROOT}/models/diffusion_models/anima-base-v1.0.safetensors"
+QWEN3_PATH="${COMFYUI_ROOT}/models/text_encoders/qwen_3_06b_base.safetensors"
+VAE_PATH="${COMFYUI_ROOT}/models/vae/qwen_image_vae.safetensors"
 
 # VRAM tier - pick the one matching your GPU. Override with:
 #   ANIMA_TRAIN_TIER=standard|balanced|low_vram ./train_anima_lora.sh ...
+# "balanced" matches a known-working real-world configuration exactly.
 TIER="${ANIMA_TRAIN_TIER:-balanced}"
 
 case "$TIER" in
@@ -86,6 +93,7 @@ esac
 
 echo "Training tier: $TIER (network_dim=$NETWORK_DIM, optimizer=$OPTIMIZER_TYPE)" >&2
 
+mkdir -p "$OUTPUT_DIR"
 cd "$SD_SCRIPTS_DIR"
 
 accelerate launch \

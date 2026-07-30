@@ -15,11 +15,26 @@ HF repo: https://huggingface.co/circlestone-labs/Anima.
    that file. Nodes install via `comfy node install <name> --uv-compile`;
    two Anima-specific nodes (the IPAdapter and the LLLite ControlNet, the
    latter not wired into any current workflow) aren't in the node registry
-   and are git-cloned directly.
-2. Make sure your Anima checkpoint, the Qwen3-0.6B text encoder, and the
-   Qwen-Image VAE are wherever ComfyUI expects them (default `models/`
-   subfolders, or point `extra_model_paths.yaml` at wherever they already
-   live).
+   and are git-cloned directly. This also downloads **two checkpoints** -
+   `anima-aesthetic-v1.1.safetensors` for generation (what the workflows in
+   `workflows/` use) and `anima-base-v1.0.safetensors` for LoRA training
+   (anima_train_network.py trains against Base, not Aesthetic - see the
+   note in `train_anima_lora.sh.example`) - plus the Qwen3 text encoder and
+   Qwen-Image VAE, needed for both.
+2. **API tokens for model downloads**: these are NOT this app's own
+   `src-tauri/.env` (that file is for the app's own runtime config, like
+   `LOCAL_LLM_BASE_URL`). `comfy model download` reads `HF_API_TOKEN` and
+   `CIVITAI_API_TOKEN` directly from your shell environment - export them
+   before running `setup_comfyui.py`:
+   ```bash
+   export HF_API_TOKEN=hf_...
+   export CIVITAI_API_TOKEN=...
+   python setup_comfyui.py
+   ```
+   Most of the HF downloads here don't actually require a token (public
+   files), but the Civitai-hosted eye detector does - that download is
+   skipped with a warning if `CIVITAI_API_TOKEN` isn't set, rather than
+   failing the whole script.
 3. Set env vars if your setup doesn't match the defaults:
    - `COMFYUI_BASE_URL` (default `http://127.0.0.1:8188`)
    - `COMFYUI_OUTPUT_DIR` - **the real filesystem path** to ComfyUI's
@@ -33,12 +48,13 @@ HF repo: https://huggingface.co/circlestone-labs/Anima.
      with - trained LoRAs land there and get used with a plain `<lora:...>`
      tag, no separate registration step needed).
    - `KOHYA_TRAIN_SCRIPT` - path to your training script (default
-     `comfyui/train_anima_lora.sh`). See `train_anima_lora.sh.example` for
-     the exact contract it needs to follow. This project does not
-     hardcode an `anima_train_network.py` invocation - LoRA rank, learning
-     rate, resolution, and offload flags need real GPU tuning we can't do
-     blind. Get the CLI command from the kohya_ss GUI (it auto-generates
-     one) and wrap it in that script.
+     `comfyui/train_anima_lora.sh`, copy `train_anima_lora.sh.example` and
+     fill in `SD_SCRIPTS_DIR`). The example script is a complete, real
+     `anima_train_network.py` invocation with three selectable VRAM tiers,
+     not a placeholder - just needs your local paths filled in.
+   - Whatever calls `assemble_lora_dataset` should pass
+     `use_quality_tags=true` - training targets Base, which was NOT
+     fine-tuned with quality strings stripped (unlike Aesthetic).
 
 ## What each workflow is for
 
