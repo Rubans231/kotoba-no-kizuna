@@ -155,10 +155,57 @@ fn patch_lora_tag(workflow: &mut Value, node_id: &str, lora_name: &str, weight: 
     }
 }
 
+/// Looks for an execution error in a /history entry's status messages.
+/// ComfyUI's history schema nests this as
+/// `status.messages: [["execution_error", {node_type, exception_message, ...}], ...]`
+/// - written defensively (lots of `.get()`/`.and_then()`) since we're not
+/// able to verify this against a live instance here; if the shape doesn't
+/// match, this just returns None and the caller falls back to its
+/// previous "no output file found" message rather than panicking.
+fn find_execution_error(history_entry: &Value) -> Option<String> {
+    let messages = history_entry.get("status")?.get("messages")?.as_array()?;
+
+    for message in messages {
+        let pair = message.as_array()?;
+        let message_type = pair.first()?.as_str()?;
+        if message_type != "execution_error" {
+            continue;
+        }
+        let details = pair.get(1)?;
+        let node_type = details.get("node_type").and_then(|v| v.as_str()).unwrap_or("unknown node");
+        let exception_message = details
+            .get("exception_message")
+            .and_then(|v| v.as_str())
+            .unwrap_or("no details provided");
+        return Some(format!("{node_type}: {exception_message}"));
+    }
+    None
+}
+
 #[derive(Serialize)]
 struct PromptRequest<'a> {
     prompt: &'a Value,
     client_id: String,
+    extra_data: ExtraData<'a>,
+}
+
+#[derive(Serialize)]
+struct ExtraData<'a> {
+    extra_pnginfo: ExtraPngInfo<'a>,
+}
+
+#[derive(Serialize)]
+struct ExtraPngInfo<'a> {
+    // ComfyUI's own web UI always attaches the full graph here for
+    // metadata embedding - some nodes (e.g. KJNodes' widget-value lookup,
+    // used by the Image Saver's %basemodelname% filename template) read
+    // this and crash with `None is not subscriptable` if it's absent,
+    // since headless API calls otherwise never populate it. We don't have
+    // the true UI-format graph (only the API-format export), so this is
+    // the API-format workflow reused as a best-effort stand-in - not
+    // byte-for-byte what the real frontend sends, but present and
+    // dict-shaped, which is what the crashing code actually needed.
+    workflow: &'a Value,
 }
 
 #[derive(Deserialize)]
@@ -233,6 +280,9 @@ pub async fn generate_image(
     let body = PromptRequest {
         prompt: &workflow,
         client_id,
+        extra_data: ExtraData {
+            extra_pnginfo: ExtraPngInfo { workflow: &workflow },
+        },
     };
 
     let submit_url = format!("{}/prompt", base_url());
@@ -254,13 +304,12 @@ pub async fn generate_image(
         .await
         .map_err(|e| format!("Failed to parse ComfyUI /prompt response: {e}"))?;
 
-    // Poll /history purely to detect completion - a history entry existing
-    // for our prompt_id means ComfyUI finished the job (successfully or
-    // with an error), regardless of whatever shape a given custom save
-    // node's own "outputs" entry takes. We locate the actual file
-    // ourselves via the unique filename we injected above, since we can't
-    // be sure this custom Image Saver node's /history schema matches
-    // vanilla SaveImage.
+    // Poll /history to detect completion AND check whether the job
+    // actually succeeded - a history entry existing means ComfyUI
+    // finished the job, but that includes finishing with an error. Not
+    // checking for that used to produce a misleading "no output file
+    // found" message when the real problem was a node crashing mid-run;
+    // now we surface the actual ComfyUI exception instead.
     let history_url = format!("{}/history/{}", base_url(), prompt_id);
     let max_attempts = 150; // 5 minutes at 2s intervals
     let mut completed = false;
@@ -271,10 +320,14 @@ pub async fn generate_image(
             continue;
         }
         let history: Value = res.json().await.map_err(|e| format!("Failed to parse ComfyUI history response: {e}"))?;
-        if history.get(&prompt_id).is_some() {
-            completed = true;
-            break;
+        let Some(entry) = history.get(&prompt_id) else { continue };
+
+        if let Some(error_message) = find_execution_error(entry) {
+            return Err(format!("ComfyUI execution failed: {error_message}"));
         }
+
+        completed = true;
+        break;
     }
     if !completed {
         return Err(format!("Timed out waiting for ComfyUI to finish generating (prompt_id {prompt_id})"));
