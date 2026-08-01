@@ -186,26 +186,60 @@ fn find_execution_error(history_entry: &Value) -> Option<String> {
 struct PromptRequest<'a> {
     prompt: &'a Value,
     client_id: String,
-    extra_data: ExtraData<'a>,
+    extra_data: ExtraData,
 }
 
 #[derive(Serialize)]
-struct ExtraData<'a> {
-    extra_pnginfo: ExtraPngInfo<'a>,
+struct ExtraData {
+    extra_pnginfo: ExtraPngInfo,
 }
 
 #[derive(Serialize)]
-struct ExtraPngInfo<'a> {
+struct ExtraPngInfo {
     // ComfyUI's own web UI always attaches the full graph here for
-    // metadata embedding - some nodes (e.g. KJNodes' widget-value lookup,
-    // used by the Image Saver's %basemodelname% filename template) read
-    // this and crash with `None is not subscriptable` if it's absent,
-    // since headless API calls otherwise never populate it. We don't have
-    // the true UI-format graph (only the API-format export), so this is
-    // the API-format workflow reused as a best-effort stand-in - not
-    // byte-for-byte what the real frontend sends, but present and
-    // dict-shaped, which is what the crashing code actually needed.
-    workflow: &'a Value,
+    // metadata embedding, and some nodes read it directly - e.g. KJNodes'
+    // widget-value lookup crashes on `None` if this is absent entirely,
+    // and separately, comfyui-easy-use's log_input node and rgthree's Seed
+    // node both do `workflow["nodes"]` expecting a UI-format node LIST.
+    // The API-format workflow we actually have is a flat {node_id: {...}}
+    // map with no "nodes" key at all, so passing it directly crashed with
+    // KeyError: 'nodes'. This is a synthesized minimal UI-format-shaped
+    // stand-in (see synthesize_ui_workflow) - not a byte-for-byte
+    // reconstruction of the real visual graph (no widget-value ordering,
+    // positions, or links), just enough structure for "find a node by id"
+    // lookups like these to succeed instead of crashing.
+    workflow: Value,
+}
+
+/// Converts the API-format workflow ({node_id: {class_type, inputs, ...}})
+/// into a minimal UI-format-shaped stand-in ({"nodes": [{"id", "type", ...}], "links": []})
+/// so code that expects the real frontend's graph shape (nodes as a list,
+/// findable by id) doesn't hard-crash. Deliberately minimal - we don't have
+/// the real widget-value ordering or link graph, only what the API export
+/// preserves.
+fn synthesize_ui_workflow(api_workflow: &Value) -> Value {
+    let mut nodes = Vec::new();
+    if let Some(obj) = api_workflow.as_object() {
+        for (node_id, node_data) in obj {
+            let id: i64 = node_id.parse().unwrap_or(0);
+            let node_type = node_data
+                .get("class_type")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Unknown");
+            nodes.push(serde_json::json!({
+                "id": id,
+                "type": node_type,
+                "widgets_values": [],
+            }));
+        }
+    }
+    let node_count = nodes.len();
+    serde_json::json!({
+        "nodes": nodes,
+        "links": [],
+        "last_node_id": node_count,
+        "last_link_id": 0,
+    })
 }
 
 #[derive(Deserialize)]
@@ -281,7 +315,7 @@ pub async fn generate_image(
         prompt: &workflow,
         client_id,
         extra_data: ExtraData {
-            extra_pnginfo: ExtraPngInfo { workflow: &workflow },
+            extra_pnginfo: ExtraPngInfo { workflow: synthesize_ui_workflow(&workflow) },
         },
     };
 
