@@ -156,10 +156,24 @@ fn lora_dataset_dir(app_handle: &tauri::AppHandle, character_id: &str) -> Result
         .to_string())
 }
 
+fn load_local_env() {
+    // Loads the project's .env regardless of the binary's working directory.
+    // Harmless no-op if none of the candidate paths exist.
+    let candidates = [
+        std::path::PathBuf::from(".env"),
+        std::path::PathBuf::from("src-tauri").join(".env"),
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".env"),
+    ];
+    for candidate in candidates {
+        if candidate.exists() {
+            let _ = dotenvy::from_path(candidate);
+            return;
+        }
+    }
+}
+
 fn main() {
-    // Loads src-tauri/.env in dev so ANTHROPIC_API_KEY doesn't need to be
-    // exported manually every session. Harmless no-op if the file is absent.
-    dotenvy::dotenv().ok();
+    load_local_env();
 
     let migrations = vec![
         Migration {
