@@ -193,18 +193,22 @@ pub async fn train_lora(
         }
     }
 
+    let character_lower = character_name.to_lowercase();
+    let trigger_lower = trigger_word.to_lowercase();
+
     let mut entries = tokio::fs::read_dir(output_dir)
         .await
         .map_err(|e| format!("Couldn't read LoRA output directory {output_dir}: {e}"))?;
     while let Ok(Some(entry)) = entries.next_entry().await {
         let name = entry.file_name().to_string_lossy().to_string();
-        if name.ends_with(".safetensors") && name.to_lowercase().contains(&character_name.to_lowercase()) {
+        let lower = name.to_lowercase();
+        if lower.ends_with(".safetensors") && (lower.contains(&character_lower) || lower.contains(&trigger_lower)) {
             return Ok(entry.path().to_string_lossy().to_string());
         }
     }
 
     Err(format!(
-        "Training script finished successfully but no .safetensors file matching '{character_name}' \
-         was found in {output_dir}, and the script didn't print a valid output path as its last line."
+        "Training script finished successfully but no .safetensors file matching '{character_name}' or '{trigger_word}' \
+          was found in {output_dir}, and the script didn't print a valid output path as its last line."
     ))
 }
