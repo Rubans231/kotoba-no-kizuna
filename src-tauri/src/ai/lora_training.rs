@@ -127,7 +127,6 @@ batch_size = 1
 image_dir = "{dataset_dir}"
 num_repeats = {num_repeats}
 caption_tag_dropout_rate = 0.05
-caption_tag_dropout_threshold = 0.8
 "#
     );
 
