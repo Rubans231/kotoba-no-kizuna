@@ -180,6 +180,66 @@ fn patch_lora_tag(workflow: &mut Value, node_id: &str, lora_name: &str, weight: 
     }
 }
 
+/// ComfyUI's seed widgets cap at 2^50 (1125899906842624); a seed above that
+/// fails prompt validation ("bigger than max ... : seed"). Mask generated
+/// seeds down to [0, 2^50) so they always pass.
+fn random_seed_value() -> Value {
+    const SEED_MASK: u64 = 0x3_FFFF_FFFF_FFFF; // 2^50 - 1
+    Value::from(Uuid::new_v4().as_u128() as u64 & SEED_MASK)
+}
+
+fn is_negative_seed(value: &Value) -> bool {
+    matches!(value.as_i64(), Some(n) if n < 0)
+}
+
+/// ComfyUI's Impact Pack wildcard hook reads the *raw* seed value from the
+/// linked seed node before execution. A `Seed (rgthree)` node set to `-1`
+/// (its "randomize" sentinel) therefore crashes the wildcard processor with
+/// `ValueError: expected non-negative integer`. Replace negative sentinels
+/// with a real non-negative seed so wildcard population and sampling both
+/// get a valid value.
+fn sanitize_seed_nodes(workflow: &mut Value) {
+    let Some(object) = workflow.as_object_mut() else {
+        return;
+    };
+
+    for (_, node) in object.iter_mut() {
+        let class_type = node
+            .get("class_type")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        let Some(inputs) = node.get_mut("inputs").and_then(Value::as_object_mut) else {
+            continue;
+        };
+
+        match class_type.as_str() {
+            "Seed (rgthree)" => {
+                if let Some(seed) = inputs.get_mut("seed") {
+                    if is_negative_seed(seed) {
+                        *seed = random_seed_value();
+                    }
+                }
+            }
+            "ImpactInt" => {
+                if let Some(value) = inputs.get_mut("value") {
+                    if is_negative_seed(value) {
+                        *value = random_seed_value();
+                    }
+                }
+            }
+            "ImpactWildcardProcessor" | "ImpactWildcardEncode" => {
+                if let Some(seed) = inputs.get_mut("seed") {
+                    if is_negative_seed(seed) {
+                        *seed = random_seed_value();
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
 /// Looks for an execution error in a /history entry's status messages.
 /// ComfyUI's history schema nests this as
 /// `status.messages: [["execution_error", {node_type, exception_message, ...}], ...]`
@@ -321,6 +381,8 @@ pub async fn generate_image(
     if let (Some(node_id), Some(lora)) = (&config.lora_tag_node_id, &lora) {
         patch_lora_tag(&mut workflow, node_id, lora.name, lora.weight);
     }
+
+    sanitize_seed_nodes(&mut workflow);
 
     // Give the output a unique, findable name rather than trusting the
     // custom Image Saver node's default %time_%basemodelname_%seed
