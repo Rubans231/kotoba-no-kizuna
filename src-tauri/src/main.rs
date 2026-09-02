@@ -89,9 +89,9 @@ async fn generate_character_image(
 /// three-segment `|||` caption files, plus a dataset_config.toml) from a
 /// set of already-generated images. `images` is a list of (path, framing)
 /// pairs where framing is "close_up" | "upper_body" | "full_body".
-/// `use_quality_tags` should be true when training against Anima-Base
-/// (this project's training target) and false only if pointed at Aesthetic
-/// instead. The dataset directory is resolved internally from
+/// `use_quality_tags` should be false when training against the Aesthetic
+/// checkpoint (this project's training target) and true only if pointed at
+/// Anima-Base instead. The dataset directory is resolved internally from
 /// character_id (app_data_dir/lora_datasets/{character_id}), same pattern
 /// as generate_character_image, so the frontend doesn't need to guess a
 /// writable path.
@@ -139,7 +139,8 @@ async fn train_character_lora(
 ) -> Result<String, String> {
     let dataset_dir = lora_dataset_dir(&app_handle, &character_id)?;
     let resolved_output_dir = output_dir.unwrap_or_else(|| {
-        std::env::var("COMFYUI_LORAS_DIR").unwrap_or_else(|_| "ComfyUI/models/loras".to_string())
+        std::env::var("COMFYUI_LORAS_DIR")
+            .unwrap_or_else(|_| ai::comfyui::default_loras_dir().to_string_lossy().to_string())
     });
     ai::lora_training::train_lora(&dataset_dir, &resolved_output_dir, &character_name, &trigger_word).await
 }
