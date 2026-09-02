@@ -148,7 +148,6 @@ accelerate launch \
   --network_alpha="$NETWORK_ALPHA" \
   --network_train_unet_only \
   --cache_latents \
-  --cache_text_encoder_outputs \
   --gradient_checkpointing \
   --optimizer_type="$OPTIMIZER_TYPE" \
   ${OPTIMIZER_ARGS[@]:+--optimizer_args "${OPTIMIZER_ARGS[@]}"} \
