@@ -145,6 +145,24 @@ async fn train_character_lora(
     ai::lora_training::train_lora(&dataset_dir, &resolved_output_dir, &character_name, &trigger_word).await
 }
 
+/// Fails fast when the LoRA training script is missing, so the frontend can
+/// avoid spending GPU time generating a training set that can never be
+/// trained. Returns the resolved script path on success.
+#[tauri::command]
+async fn lora_training_preflight() -> Result<String, String> {
+    let script_path = std::env::var("KOHYA_TRAIN_SCRIPT")
+        .unwrap_or_else(|_| ai::comfyui::comfyui_base_dir().join("train_anima_lora.sh").to_string_lossy().to_string());
+
+    if !std::path::Path::new(&script_path).exists() {
+        return Err(format!(
+            "LoRA training script not found at '{script_path}'. Set KOHYA_TRAIN_SCRIPT or create it - \
+             see comfyui/train_anima_lora.sh.example for the expected contract."
+        ));
+    }
+
+    Ok(script_path)
+}
+
 fn lora_dataset_dir(app_handle: &tauri::AppHandle, character_id: &str) -> Result<String, String> {
     let app_data_dir = app_handle
         .path()
@@ -254,7 +272,8 @@ fn main() {
             generate_character_concept,
             generate_character_image,
             assemble_lora_dataset,
-            train_character_lora
+            train_character_lora,
+            lora_training_preflight
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
