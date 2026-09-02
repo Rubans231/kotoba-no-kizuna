@@ -311,10 +311,35 @@ fn synthesize_ui_workflow(api_workflow: &Value) -> Value {
                 .get("class_type")
                 .and_then(|v| v.as_str())
                 .unwrap_or("Unknown");
+
+            // Impact Pack's onprompt hook writes `widgets_values[1]` and
+            // `widgets_values[2]` for wildcard nodes, so those need at
+            // least three writable slots. Other nodes only need the key to
+            // exist.
+            let mut widgets_values: Vec<Value> = vec![Value::Null; 8];
+            if node_type == "ImpactWildcardProcessor" || node_type == "ImpactWildcardEncode" {
+                if let Some(inputs) = node_data.get("inputs") {
+                    widgets_values[0] = inputs.get("wildcard_text").cloned().unwrap_or(Value::Null);
+                    widgets_values[1] = inputs.get("populated_text").cloned().unwrap_or(Value::Null);
+                    widgets_values[2] = inputs.get("mode").cloned().unwrap_or_else(|| Value::String("populate".to_string()));
+                    if let Some(seed) = inputs.get("seed") {
+                        widgets_values[3] = seed.clone();
+                    }
+                }
+            }
+
+            // `inputs` must be present (Impact Pack's ImpactSwitch reads
+            // `node['inputs']` directly), but an empty list is enough for
+            // label lookups - the hidden input is only used to find a
+            // human-readable slot label, not for execution.
             nodes.push(serde_json::json!({
                 "id": id,
                 "type": node_type,
-                "widgets_values": [],
+                "title": node_type,
+                "properties": {},
+                "widgets_values": widgets_values,
+                "inputs": [],
+                "outputs": [],
             }));
         }
     }
