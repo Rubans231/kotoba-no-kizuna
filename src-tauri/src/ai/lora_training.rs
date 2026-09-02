@@ -150,12 +150,12 @@ pub async fn train_lora(
     trigger_word: &str,
 ) -> Result<String, String> {
     let script_path = std::env::var("KOHYA_TRAIN_SCRIPT")
-        .unwrap_or_else(|_| "comfyui/train_anima_lora.sh".to_string());
+        .unwrap_or_else(|_| crate::ai::comfyui::comfyui_base_dir().join("train_anima_lora.sh").to_string_lossy().to_string());
 
     if !PathBuf::from(&script_path).exists() {
         return Err(format!(
             "Training script not found at '{script_path}'. Set KOHYA_TRAIN_SCRIPT or create it - \
-             see comfyui/train_anima_lora.sh.example for the expected contract."
+              see comfyui/train_anima_lora.sh.example for the expected contract."
         ));
     }
 
@@ -163,7 +163,12 @@ pub async fn train_lora(
         .await
         .map_err(|e| format!("Couldn't create LoRA output directory {output_dir}: {e}"))?;
 
-    let output = Command::new(&script_path)
+    let mut command = Command::new(if cfg!(unix) { "bash" } else { script_path.as_str() });
+    if cfg!(unix) {
+        command.arg(&script_path);
+    }
+
+    let output = command
         .arg(dataset_dir)
         .arg(output_dir)
         .arg(trigger_word)
