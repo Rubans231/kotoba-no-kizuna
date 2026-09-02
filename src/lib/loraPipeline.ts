@@ -29,6 +29,22 @@ async function generateOne(kind: string, positivePrompt: string, referenceImageP
   });
 }
 
+/**
+ * Whether the user's LoRA training script is configured. Only the final
+ * train step needs it - the base/view/training images and the assembled
+ * dataset are reusable artifacts that generate fine without it. A missing
+ * script therefore defers training rather than aborting the whole pipeline
+ * before any image is generated.
+ */
+async function isTrainingScriptAvailable(): Promise<boolean> {
+  try {
+    await invoke<string>('lora_training_preflight');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function runBaseImageStage(persona: CompanionPersona): Promise<string> {
   log('info', `${persona.displayName}: generating base image...`);
   const prompt = `${persona.visualDesignPrompt}, A-pose, arms slightly raised, standing straight, blank white background, full body, neutral expression, character reference sheet`;
@@ -122,7 +138,7 @@ async function runTrainingStage(
   persona: CompanionPersona,
   triggerWord: string,
   trainingSetPaths: TrainingSetImage[],
-): Promise<string> {
+): Promise<string | null> {
   const images = trainingSetPaths.map((t): [string, string] => [t.path, t.framing]);
 
   log('info', `${persona.displayName}: assembling training dataset...`);
@@ -135,6 +151,14 @@ async function runTrainingStage(
     useQualityTags: false,
     characterId: persona.characterId,
   });
+
+  // Only this final step needs the user's Kohya script. A missing script
+  // defers training (returns null) instead of aborting - the generated
+  // images + assembled dataset are already saved and reusable.
+  if (!(await isTrainingScriptAvailable())) {
+    log('info', `${persona.displayName}: images + dataset ready - LoRA training deferred (set KOHYA_TRAIN_SCRIPT and re-run to train)`);
+    return null;
+  }
 
   log('info', `${persona.displayName}: training LoRA (this can take a long time)...`);
   const loraPath = await invoke<string>('train_character_lora', {
@@ -197,7 +221,14 @@ export async function runLoraPipelineForCharacter(
       state = { ...state, stage: 'training', updatedAt: new Date().toISOString() };
       onUpdate(state);
       const loraPath = await runTrainingStage(persona, state.triggerWord, state.trainingSetPaths);
-      state = { ...state, stage: 'complete', loraPath, errorMessage: null, updatedAt: new Date().toISOString() };
+      if (loraPath) {
+        state = { ...state, stage: 'complete', loraPath, errorMessage: null, updatedAt: new Date().toISOString() };
+      } else {
+        // Training deferred (no Kohya script) - stay in the 'training' stage
+        // so the pipeline resumes right here once the script is configured.
+        // The images and dataset are already saved and won't be regenerated.
+        state = { ...state, stage: 'training', errorMessage: null, updatedAt: new Date().toISOString() };
+      }
       onUpdate(state);
     }
 
