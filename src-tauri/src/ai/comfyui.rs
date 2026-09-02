@@ -47,12 +47,37 @@ pub struct WorkflowConfig {
     pub output_path_node_id: Option<String>,
 }
 
+pub fn comfyui_base_dir() -> PathBuf {
+    let candidates = [
+        PathBuf::from("comfyui"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("comfyui"),
+    ];
+    candidates
+        .into_iter()
+        .find(|dir| dir.join("configs").is_dir() || dir.join("workflows").is_dir())
+        .unwrap_or_else(|| PathBuf::from("comfyui"))
+}
+
+pub fn default_comfyui_root() -> PathBuf {
+    if let Ok(home) = std::env::var("HOME") {
+        return PathBuf::from(home).join("comfy").join("ComfyUI");
+    }
+    if let Ok(profile) = std::env::var("USERPROFILE") {
+        return PathBuf::from(profile).join("comfy").join("ComfyUI");
+    }
+    PathBuf::from("ComfyUI")
+}
+
+pub fn default_loras_dir() -> PathBuf {
+    default_comfyui_root().join("models").join("loras")
+}
+
 fn configs_dir() -> PathBuf {
-    PathBuf::from("comfyui/configs")
+    comfyui_base_dir().join("configs")
 }
 
 fn workflows_dir() -> PathBuf {
-    PathBuf::from("comfyui/workflows")
+    comfyui_base_dir().join("workflows")
 }
 
 fn load_config(kind: &str) -> Result<WorkflowConfig, String> {
@@ -373,7 +398,8 @@ pub async fn generate_image(
     // since we're reading the file directly rather than via /view -
     // avoids needing to guess this custom node's exact filename/counter
     // suffix convention.
-    let comfyui_output_dir = std::env::var("COMFYUI_OUTPUT_DIR").unwrap_or_else(|_| "ComfyUI/output".to_string());
+    let comfyui_output_dir = std::env::var("COMFYUI_OUTPUT_DIR")
+        .unwrap_or_else(|_| default_comfyui_root().join("output").to_string_lossy().to_string());
     let search_dir = PathBuf::from(&comfyui_output_dir).join("kotoba_app");
     let search_dir = if search_dir.exists() { search_dir } else { PathBuf::from(&comfyui_output_dir) };
 
