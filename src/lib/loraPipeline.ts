@@ -130,7 +130,9 @@ async function runTrainingStage(
     images,
     triggerWord,
     visualTags: persona.visualTags,
-    useQualityTags: true,
+    // Train against the Aesthetic checkpoint, whose training data had quality
+    // tags stripped - so omit them here (Base would need true).
+    useQualityTags: false,
     characterId: persona.characterId,
   });
 
