@@ -105,8 +105,11 @@ kinds (see each config's `_comment`).
   matches vanilla `SaveImage`'s schema closely enough to matter - sidestepped
   entirely by injecting a unique filename and glob-matching the output
   directory directly, rather than depending on it.
-- The `-1` seed value on "Seed (rgthree)" means auto-randomize per your
-  confirmation, so it's left untouched rather than patched.
+- The `-1` seed value on "Seed (rgthree)" is ComfyUI-frontend's
+  auto-randomize sentinel, but Impact Pack's wildcard hook reads raw seed
+  values before execution and rejects negative integers. The app now
+  replaces negative seed sentinels with a real non-negative seed before
+  submitting the prompt.
 - No part of the ComfyUI HTTP integration has been tested against a real
   running instance in the environment this was built in - the custom nodes
   these workflows depend on aren't set up here, and there's no GPU.
