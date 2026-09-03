@@ -50,81 +50,21 @@ first launch. If you changed llama-server's host/port or started it with
 > [`src-tauri/comfyui/README.md`](src-tauri/comfyui/README.md). Details in
 > [Character art & LoRA training](docs/art-and-lora.md).
 
-## What's actually implemented right now
+## Using the app
 
-- Companion persona system (`src/data/companions.ts`,
-  `src/core/types/companion.ts`) — 4 companions across 3 rarities (Rin ★3,
-  Sora ★3, Aoi ★4, Yui ★5), each with a personality, specialty, and teaching
-  philosophy that shapes the system prompt every turn. Only Rin starts
-  owned; the rest are earned through the gacha.
-- Chat loop (`src/features/chat/`) — sends the conversation to a local
-  OpenAI-compatible server (llama-server by default) via a Tauri command
-  (`send_chat_message` in `src-tauri/src/main.rs`). One model stays loaded;
-  each companion is a different system prompt + separate conversation
-  history against that same model, not a model swap per character (swapping
-  GGUF weights per message would take seconds to minutes and kill the UX).
-- The model is constrained via a GBNF grammar (`src-tauri/src/ai/client.rs`)
-  to always reply in structured JSON, including per-word nuance/mnemonic/
-  related-word fields that a companion is instructed to fill in more or less
-  based on her rarity — the "rarity makes you a better teacher, not a
-  stronger unit" idea from the design doc. `translation`/`meaning`/`nuance`/
-  `mnemonic` are further constrained to a character class that excludes
-  Japanese Unicode ranges entirely, so those fields can't drift into
-  Japanese regardless of model quality — `speech`/`word`/`reading`/
-  `related_words` are left unrestricted since those should contain Japanese.
-- SRS engine (`src/features/language-engine/utils/srsAlgorithm.ts`) — SM-2,
-  wired into a proper flip-card review screen (`src/features/srs/`): word
-  first, "Show Answer" reveals reading/meaning/nuance/mnemonic/related
-  words from the new vocab dictionary, then you grade based on actual
-  recall. Higher-rarity companions re-teaching an already-known word will
-  fill in nuance/mnemonic that a lower-rarity companion left blank, without
-  ever overwriting existing detail with blanker data.
-- **Abilities** (`src/data/abilities.ts`, `src/features/abilities/`,
-  `src/lib/abilityUnlocks.ts`) — one signature global passive per companion,
-  unlocked permanently by owning her and reaching a bond level, then
-  toggleable on/off. Unlocking one applies its effect to every companion's
-  teaching, not just hers (e.g. Aoi's "Deep Teaching" forces max teaching
-  depth account-wide once toggled on). New Abilities tab shows locked
-  abilities with a bond-level progress bar, unlocked ones with a toggle, and
-  the main nav gets a badge dot when there's an unseen unlock.
-- **Random banner** (`src/features/randomBanner/`, `src/lib/randomBanner.ts`,
-  `src/lib/characterGenerator.ts`) — a separate acquisition path from the
-  curated Standard/Special gacha. Pull mechanic is a roulette: 1-in-6 chance
-  of any character, and given a hit, 68%/25%/7% split across 3/4/5-star
-  (verified against 300k simulated pulls). Every hit invents a brand-new,
-  never-before-seen companion via the local model (name, personality,
-  archetype, teaching philosophy, daily routine, and a visual design prompt
-  saved for a future art-gen pipeline) — genuinely unique per player, not
-  drawn from a fixed pool. Costs a second, cheaper currency (**shards**,
-  separate from gems) so it doesn't compete with the curated banners'
-  economy. Roster is capped (12 by default) since an unbounded number of
-  characters becomes unmanageable; once full, you either **discard** a
-  random companion outright or **wager** her on one more spin - win and
-  she's replaced by a fresh mystery character, lose and she's gone. Random
-  characters are fully chattable (same chat/SRS/relationship systems as the
-  curated cast) via a persona resolver that looks in both the static roster
-  and the generated one - but they don't have abilities, since those are
-  tied to the four named curated companions specifically.
-- **Daily commissions** (`src/features/commissions/`) — 3 daily tasks (talk,
-  learn 3 words, review 10 cards) that award gems on completion/claim.
-- **Gacha** (`src/features/gacha/`, `src/lib/gacha.ts`) — a real weighted
-  pull (70/25/5 by rarity) with hard pity at 10 pulls and duplicate refunds,
-  against a roster you can extend by adding entries to `companions.ts`. This
-  is the curated Standard banner - kept deliberately separate from the
-  Random banner above.
-- **Relationship depth** (`src/lib/relationship.ts`,
-  `src/features/chat/components/RelationshipBars.tsx`) — seven tracked
-  dimensions per companion (trust, respect, comfort, friendship, affection,
-  study compatibility, shared memories), each nudged independently by the
-  model based on what actually happened in the turn, visible as a
-  collapsible bar panel under her name in chat.
-- **Daily routines** (`src/lib/companionStatus.ts`) — each companion has a
-  morning/afternoon/evening/late-night activity that changes with real time
-  of day, shown as a status line in chat and fed into her system prompt so
-  she can reference it naturally.
-- Everything persists to SQLite so progress survives a restart.
-- The original NLP tokenizer sandbox (Rust `lindera` + IPADIC) is kept as a
-  "sandbox" tab — useful for testing Japanese tokenization directly.
+The top bar is a row of tabs plus your currency (gems + shards) and an
+activity **Log** toggle (top-right — it's where the art/LoRA pipeline reports
+progress). Only **Rin** is owned at first; the rest are earned.
+
+| Tab | What it is | Deep dive |
+|---|---|---|
+| **Chat** | Talk to your active companion; she teaches vocab in context and your bond grows. Switch between owned companions with the pill row under the nav. | [Teaching & review](docs/teaching.md) |
+| **Review** | Spaced-repetition cards for everything you've been taught. Flip, then grade. | [Teaching & review](docs/teaching.md#review) |
+| **Commissions** | Three daily tasks that pay gems when you claim them. | [Daily commissions](docs/commissions.md) |
+| **Gacha** | The curated **Standard Summon** — weighted pulls, hard pity, duplicate refunds. | [Banners & economy](docs/banners.md) |
+| **Random** | The **Random Banner** roulette — a 1-in-6 chance to *invent* a brand-new, unique companion. | [Banners & economy](docs/banners.md) |
+| **Abilities** | Global passive "learning tools" unlocked by bonding with companions; toggleable. A red dot marks unseen unlocks. | [Abilities](docs/abilities.md) |
+| **Sandbox** | A direct window into the Rust `lindera` tokenizer — paste Japanese, see the morphemes. | [Architecture](docs/architecture.md#japanese-nlp-sandbox) |
 
 ## Roadmap
 
