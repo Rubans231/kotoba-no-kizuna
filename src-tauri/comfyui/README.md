@@ -16,10 +16,10 @@ HF repo: https://huggingface.co/circlestone-labs/Anima.
    two Anima-specific nodes (the IPAdapter and the LLLite ControlNet, the
    latter not wired into any current workflow) aren't in the node registry
    and are git-cloned directly. This also downloads **two checkpoints** -
-   `anima-aesthetic-v1.1.safetensors` for generation (what the workflows in
-   `workflows/` use) and `anima-base-v1.0.safetensors` for LoRA training
-   (anima_train_network.py trains against Base, not Aesthetic - see the
-   note in `train_anima_lora.sh.example`) - plus the Qwen3 text encoder and
+   `anima-aesthetic-v1.1.safetensors` (what the `workflows/` use for both
+   generation AND LoRA training, so a trained LoRA lines up with the base it
+   is applied to) and `anima-base-v1.0.safetensors` (only needed if you
+   deliberately train against Base) - plus the Qwen3 text encoder and
    Qwen-Image VAE, needed for both.
 2. **API tokens for model downloads**: these are NOT this app's own
    `src-tauri/.env` (that file is for the app's own runtime config, like
@@ -53,8 +53,8 @@ HF repo: https://huggingface.co/circlestone-labs/Anima.
      `anima_train_network.py` invocation with three selectable VRAM tiers,
      not a placeholder - just needs your local paths filled in.
    - Whatever calls `assemble_lora_dataset` should pass
-     `use_quality_tags=true` - training targets Base, which was NOT
-     fine-tuned with quality strings stripped (unlike Aesthetic).
+     `use_quality_tags=false` - training targets Aesthetic, which WAS
+     fine-tuned with quality strings stripped (Base would need true).
 
 ## What each workflow is for
 
