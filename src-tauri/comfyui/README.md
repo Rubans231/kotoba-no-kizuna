@@ -38,20 +38,20 @@ HF repo: https://huggingface.co/circlestone-labs/Anima.
 3. Set env vars if your setup doesn't match the defaults:
    - `COMFYUI_BASE_URL` (default `http://127.0.0.1:8188`)
    - `COMFYUI_OUTPUT_DIR` - **the real filesystem path** to ComfyUI's
-     output folder (e.g. `/home/robin/comfy/ComfyUI/output`). This has to
-     be a path the Tauri app can read directly - we locate generated
-     images by filename-glob here rather than trusting `/history`'s exact
-     schema for your custom "Image Saver Simple" node (unverified whether
-     it matches vanilla `SaveImage`).
+     output folder. Defaults to `~/comfy/ComfyUI/output`, matching the
+     setup script's layout. This has to be a path the Tauri app can read
+     directly - we locate generated images by filename-glob here rather
+     than trusting `/history`'s exact schema for your custom "Image Saver
+     Simple" node.
    - `COMFYUI_LORAS_DIR` - where trained LoRAs get written (default
-     `ComfyUI/models/loras`, matching what you said you're most familiar
-     with - trained LoRAs land there and get used with a plain `<lora:...>`
-     tag, no separate registration step needed).
-   - `KOHYA_TRAIN_SCRIPT` - path to your training script (default
-     `comfyui/train_anima_lora.sh`, copy `train_anima_lora.sh.example` and
-     fill in `SD_SCRIPTS_DIR`). The example script is a complete, real
-     `anima_train_network.py` invocation with three selectable VRAM tiers,
-     not a placeholder - just needs your local paths filled in.
+     `~/comfy/ComfyUI/models/loras`; trained LoRAs land there and get used
+     with a plain `<lora:...>` tag, no separate registration step needed).
+   - `KOHYA_TRAIN_SCRIPT` - path to your training script. Defaults to
+     `comfyui/train_anima_lora.sh`, a complete `anima_train_network.py`
+     invocation (trains against Aesthetic, outputs kohya's native LoRA
+     format, which ComfyUI loads directly) with all paths and params
+     env-overridable. `train_anima_lora.sh.example` documents the contract
+     and an alternative tier-based setup.
    - Whatever calls `assemble_lora_dataset` should pass
      `use_quality_tags=false` - training targets Aesthetic, which WAS
      fine-tuned with quality strings stripped (Base would need true).
