@@ -21,67 +21,6 @@ sent to a hosted API, ever.
         companions ◄── gacha / random banner ──  bond & abilities unlock
 ```
 
-## Checkpoint status (see build log in chat / commit message)
-
-Current state, in order of what landed:
-
-1. **Rust wouldn't compile** - `lindera-tokenizer = "0.34.0"` never existed
-   (that split-crate family is deprecated, frozen at 0.32.3). Migrated to
-   the maintained unified `lindera` crate (4.x) - `Segmenter` + `Tokenizer`
-   + `load_dictionary("embedded://ipadic")`. This has been compiled and run
-   successfully (there's a real `Cargo.lock` to prove it).
-2. **Blank screen after summoning a companion, and chat's top/bottom bars
-   requiring a scroll to reach** - both were the same root cause: leftover
-   Vite-template CSS on `#root` used `min-height` instead of a bounded
-   `height`, so long content grew the whole page instead of scrolling
-   internally, carrying the nav bar and chat composer off-screen with it.
-   Fixed the height chain end-to-end (`index.css`, `App.tsx`, `ChatPanel.tsx`)
-   and added a "Chat now" button on freshly-pulled companions plus a
-   defensive auto-recovery if the active companion ever points at nothing.
-3. **Review cards only showed the bare word** - rebuilt as a real flip-card:
-   word first, "Show Answer" reveals reading/meaning/nuance/mnemonic/related
-   words, *then* you grade. Needed a new `vocab_dictionary` table (migration
-   4) since that teaching detail wasn't persisted anywhere queryable before.
-4. **"migration N was previously applied but is missing"** - not an app bug;
-   see Troubleshooting below for why, plus a reset script.
-5. **Teaching replies sometimes drifted into pure Japanese for fields meant
-   to be English** (a known weakness in some local models' multilingual
-   instruction-following, not unique to this app). Rather than just asking
-   more firmly, the GBNF grammar (`src-tauri/src/ai/client.rs`) now
-   physically excludes Japanese Unicode ranges (hiragana, katakana, CJK
-   ideographs, fullwidth forms) from `translation`/`meaning`/`nuance`/
-   `mnemonic` at the character-sampling level - the model is incapable of
-   emitting Japanese there regardless of model quality. `speech`/`word`/
-   `reading`/`related_words` are untouched since those should contain
-   Japanese.
-6. **Abilities system** - one signature global passive per companion
-   (`src/data/abilities.ts`), unlocked permanently by owning her and
-   reaching a bond level, then toggleable on/off. Unlocking one applies its
-   effect to *every* companion's teaching, not just hers. New Abilities tab
-   with progress bars and toggles, plus a nav badge for unseen unlocks.
-7. **Random banner** - a separate acquisition path from the curated
-   Standard/Special gacha: a roulette pull (1-in-6 hit chance, 68/25/7 split
-   across 3/4/5-star given a hit) that, on a hit, generates a brand-new
-   companion via the local model rather than drawing from a fixed pool -
-   genuinely unique per player. Second currency (shards), roster cap with
-   discard/wager-to-reroll options once full.
-
-Frontend is verified: `npm run build` and `npx oxlint` both pass clean.
-Ability unlock logic (ownership + bond-level gating, no double-unlocking)
-and the roulette odds (300k+ simulated pulls landing within statistical
-noise of the specified 1/6, 68%, 25%, 7% targets) were both smoke-tested
-directly, not just written and assumed correct. Both GBNF grammars were
-checked with a hand-written structural validator (rule references resolve,
-brackets/quotes balance) since no llama.cpp grammar parser is available in
-this environment - worth a real test run against llama-server to confirm
-the language restriction and character generation behave as intended in
-practice.
-The Rust side compiles and runs (per the working `Cargo.lock`) as of the
-lindera migration; the newer changes in `main.rs`/`client.rs` since then
-(migrations 4-6, the grammar rewrite, the character-generation endpoint)
-have not been separately re-verified with a fresh `cargo build` in this
-environment - that's still worth doing after pulling this.
-
 ## Setup
 
 ```bash
