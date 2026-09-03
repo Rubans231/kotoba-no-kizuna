@@ -106,27 +106,15 @@ There is no test suite configured yet.
 
 ## Roadmap
 
-1. **Rotating shop** - same procedural character pool as the Random banner,
-   but a small curated selection refreshed daily (low rarity) / weekly (high
-   rarity) for direct purchase instead of RNG pulls.
-2. **AI-generated character art** - a Rust HTTP client analogous to the
-   llama-server integration, hitting a local ComfyUI instance with the
-   `visual_design_prompt` already being generated and saved per character,
-   using the Hoseki LustrousMix Anima checkpoint. Not started, and can't be
-   tested in the environment this was built in (no GPU, no reachable
-   ComfyUI/civitai) - the Rust side can be written following the existing
-   local-server pattern, but needs real testing on a machine that has
-   ComfyUI running.
-3. Events (seasonal banners/stories) and outfits — see the See-through /
-   StretchyStudio discussion for the art pipeline plan there too.
-4. Reading/listening toolkit (hover dictionary, sentence mining) — reuses
-   the tokenizer that's already there.
-5. A real animated companion — see the "Live2D" discussion for the current
-   plan (procedural layer animation first, real rigging later).
-6. Desktop assistant overlay (OCR, clipboard translation) — leverages the
-   fact this is already a native Tauri app.
-7. **Adventure gacha** (mid-term) - a Red Light/Green Light + dice-driven
-   event run as an alternate pull mechanic, with power-ups and hazards along
-   the way.
-8. **Living worlds** (far future) - 3D character/environment generation with
-   auto-rigging, for real-time interactive bonding.
+- **Rotating shop** — the same procedural character pool as the Random banner,
+  but a small curated selection refreshed daily/weekly for direct purchase.
+- **Reading/listening toolkit** — hover dictionary and sentence mining, reusing
+  the `lindera` tokenizer that's already there.
+- **Events & outfits** — seasonal banners/stories.
+- **A real animated companion** — procedural layer animation first, rigging later.
+- **Desktop assistant overlay** — OCR and clipboard translation, leveraging that
+  this is already a native Tauri app.
+- **Adventure gacha** (mid-term) — a Red Light/Green Light + dice-driven event
+  run as an alternate pull mechanic.
+- **Living worlds** (far future) — 3D character/environment generation with
+  auto-rigging for real-time interactive bonding.
