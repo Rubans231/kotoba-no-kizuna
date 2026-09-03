@@ -93,6 +93,17 @@ with the **SM-2** algorithm. Companion personas, abilities, commissions, and the
 gacha/random-banner economy all live in SQLite and survive restarts. See
 [Architecture](docs/architecture.md) for the full picture.
 
+## Development
+
+- `npm run dev` — Vite only (frontend in a browser; Tauri commands unavailable).
+- `npm run tauri dev` — the full app (spawns Vite via `beforeDevCommand`).
+- `npm run lint` — `oxlint` (config in `.oxlintrc.json`).
+- `npm run build` — `tsc -b && vite build` (this is the only typecheck).
+- `./scripts/reset-dev-db.sh` — delete the dev SQLite db so it rebuilds from the
+  current migrations (see [Troubleshooting](docs/troubleshooting.md)).
+
+There is no test suite configured yet.
+
 ## Roadmap
 
 1. **Rotating shop** - same procedural character pool as the Random banner,
