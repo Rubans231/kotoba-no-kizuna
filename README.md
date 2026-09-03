@@ -11,6 +11,16 @@ doesn't make a companion a "stronger unit"; it makes her a *better teacher*.
 Everything runs on your own machine against your own local model. Nothing is
 sent to a hosted API, ever.
 
+```
+        you  ──►  chat with a companion  ──►  she teaches a word in context
+                                                        │
+        gems / shards ◄── daily commissions            ▼
+                                                        │
+        you  ◄── review due cards (SM-2)  ◄──  SRS deck + vocab dictionary
+                                                        │
+        companions ◄── gacha / random banner ──  bond & abilities unlock
+```
+
 ## Checkpoint status (see build log in chat / commit message)
 
 Current state, in order of what landed:
