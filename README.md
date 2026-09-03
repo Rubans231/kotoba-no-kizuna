@@ -21,6 +21,14 @@ sent to a hosted API, ever.
         companions ◄── gacha / random banner ──  bond & abilities unlock
 ```
 
+## Stack
+
+**Tauri 2 (Rust)** + **React 19 + TypeScript** + **Zustand** + **SQLite**
+(via `tauri-plugin-sql`) + a **local model server** (llama-server,
+OpenAI-compatible) for dialogue and character generation + **`lindera`** for
+Japanese morphological analysis. Optional: a local **ComfyUI** instance for
+generating companion art and training per-character LoRAs.
+
 ## Setup
 
 ```bash
