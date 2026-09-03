@@ -29,7 +29,7 @@ OpenAI-compatible) for dialogue and character generation + **`lindera`** for
 Japanese morphological analysis. Optional: a local **ComfyUI** instance for
 generating companion art and training per-character LoRAs.
 
-## Setup
+## Quick start
 
 ```bash
 npm install
@@ -40,59 +40,15 @@ llama-server -m /path/to/model.gguf -c 8192 --host 127.0.0.1 --port 8080 -ngl 99
 npm run tauri dev
 ```
 
-No API key needed by default. If you changed llama-server's host/port, or
-started it with `--api-key`, copy `src-tauri/.env.example` to
-`src-tauri/.env` and set `LOCAL_LLM_BASE_URL` / `LOCAL_LLM_API_KEY` there.
+No API key is needed by default. The SQLite database is created automatically on
+first launch. If you changed llama-server's host/port or started it with
+`--api-key`, see [Configuration](docs/configuration.md).
 
-### Switching models
-
-The app doesn't know or care which model is loaded — it just talks to
-whatever's on `LOCAL_LLM_BASE_URL`. Swapping models is purely a llama-server
-launch-command concern, no app changes needed:
-
-```bash
-# Whatever you're already running, e.g. Gemma 4 26B A4B (MoE, fits 12GB VRAM
-# via expert offload):
-llama-server -m gemma-4-26b-a4b-Q4_K_M.gguf -c 8192 --host 127.0.0.1 --port 8080 -ngl 999
-
-# Hermes 4 14B (dense, Qwen3-14B base) - fits fully in 12GB VRAM at Q4_K_M
-# with room to spare for context, no offloading tricks required:
-llama-server -m Hermes-4-14B-Q4_K_M.gguf -c 8192 --host 127.0.0.1 --port 8080 -ngl 999
-```
-
-Just restart llama-server with the new `-m` path and the app picks it up on
-the next message - no rebuild.
-
-The SQLite database (`kotoba.db`) is created automatically on first launch
-and the schema in `src-tauri/migrations/001_init_schema.sql` (plus later
-numbered migration files) is applied via Tauri's migration runner.
-
-### Troubleshooting
-
-**"migration N was previously applied but is missing in the resolved
-migrations"** — this means the db file on disk has a migration recorded as
-applied that the currently-running code doesn't register. The important
-thing to know: `kotoba.db` does **not** live in this project folder. It
-lives in your OS's app-config directory, keyed by the app identifier in
-`tauri.conf.json` (`com.rubans231.kotobanokizuna`):
-
-- Linux: `~/.config/com.rubans231.kotobanokizuna/kotoba.db`
-- macOS: `~/Library/Application Support/com.rubans231.kotobanokizuna/kotoba.db`
-- Windows: `%APPDATA%\com.rubans231.kotobanokizuna\kotoba.db`
-
-That means it persists across git checkouts, branches, and patches. If you
-ever run a build whose migrations list doesn't match what an earlier run
-recorded (jumping to an older commit, or a patch conflict that silently
-dropped a `Migration { ... }` entry from `main.rs`), the plugin refuses to
-start rather than guess. During active development this is expected and
-low-stakes — it's a throwaway dev database — so the fix is just to delete
-it and let it rebuild fresh from the current migrations:
-
-```bash
-./scripts/reset-dev-db.sh
-```
-
-(Windows: delete the `kotoba.db` file at the path above manually.)
+> **Want the full art + LoRA pipeline too?** The core app works without it, but
+> generating companion portraits and training per-character LoRAs requires a
+> local ComfyUI install. Set that up via
+> [`src-tauri/comfyui/README.md`](src-tauri/comfyui/README.md). Details in
+> [Character art & LoRA training](docs/art-and-lora.md).
 
 ## What's actually implemented right now
 
