@@ -7,6 +7,13 @@ architecture - not SDXL/Illustrious, despite earlier confusion on our part).
 Official model page: https://civitai.com/models/2458426/anima-official,
 HF repo: https://huggingface.co/circlestone-labs/Anima.
 
+> **Reading this alongside the rest of the docs:** this page is the *setup*
+> guide for the ComfyUI + kohya environment. How the app *uses* it (the
+> multi-stage pipeline, per-character queue, resume/defer behavior, and the
+> known fidelity issue) is in [Character art & LoRA training](../../docs/art-and-lora.md);
+> every env var is in [Configuration](../../docs/configuration.md); the
+> errors you'll actually hit are in [Troubleshooting](../../docs/troubleshooting.md).
+
 ## Setup
 
 1. Run `setup_comfyui.py` (adapted from an existing launch script) to
@@ -76,6 +83,10 @@ base template. Only the reference/input image node IDs differ between
 kinds (see each config's `_comment`).
 
 ## Character creation pipeline
+
+(The app-side orchestration of these steps — stages, resume/defer, the trigger
+word, and the per-character queue — is documented in
+[Character art & LoRA training](../../docs/art-and-lora.md).)
 
 1. Generate the base A-pose reference image (`t2i_base`).
 2. Generate view-profile images via `single_ipa`/`double_ipa`/`four_ipa`
