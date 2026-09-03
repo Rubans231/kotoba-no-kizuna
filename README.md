@@ -66,6 +66,21 @@ progress). Only **Rin** is owned at first; the rest are earned.
 | **Abilities** | Global passive "learning tools" unlocked by bonding with companions; toggleable. A red dot marks unseen unlocks. | [Abilities](docs/abilities.md) |
 | **Sandbox** | A direct window into the Rust `lindera` tokenizer — paste Japanese, see the morphemes. | [Architecture](docs/architecture.md#japanese-nlp-sandbox) |
 
+## Feature deep dives
+
+Each of these documents one system in depth, including the exact numbers
+(rates, thresholds, formulas) and *why* it's shaped the way it is.
+
+- [**Companions**](docs/companions.md) — the curated roster, rarity, and how a persona drives every turn.
+- [**Teaching & review**](docs/teaching.md) — the chat loop, dynamic teaching depth, the relationship system, daily routines, and the SM-2 review engine.
+- [**Banners & economy**](docs/banners.md) — the Standard gacha and the Random roulette, and how gems vs. shards keep them separate.
+- [**Abilities**](docs/abilities.md) — the four signature global passives and how unlocking works.
+- [**Daily commissions**](docs/commissions.md) — the daily task loop that funds the gacha.
+- [**Character art & LoRA training**](docs/art-and-lora.md) — the multi-stage pipeline that portraits a companion and trains a LoRA so she renders consistently. *(Work in progress — see the known-issues note.)*
+- [**Architecture**](docs/architecture.md) — how it all fits together under the hood.
+- [**Configuration**](docs/configuration.md) — every environment variable, where your data lives, and how to swap models.
+- [**Troubleshooting**](docs/troubleshooting.md) — the errors you'll actually hit and how to fix them.
+
 ## Roadmap
 
 1. **Rotating shop** - same procedural character pool as the Random banner,
