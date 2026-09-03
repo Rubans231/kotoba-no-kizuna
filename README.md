@@ -1,15 +1,15 @@
 # Kotoba no Kizuna
 
-An AI companion desktop app for learning Japanese: talk with a companion who
-has her own personality and teaching philosophy, she teaches you vocabulary
-naturally in conversation, and it schedules that vocabulary into spaced
-repetition review automatically.
+**Kotoba no Kizuna** (言葉の絆, "bonds of words") is an offline, AI-companion
+desktop app for learning Japanese the way you'd actually learn it from people:
+by talking. You summon a cast of companions — each a different personality with
+a different teaching philosophy — and simply chat with them. They weave new
+vocabulary into the conversation, the app quietly files every word into a
+spaced-repetition deck, and you review those cards when they're due. Rarity
+doesn't make a companion a "stronger unit"; it makes her a *better teacher*.
 
-Stack: **Tauri 2 (Rust)** + **React 19 + TypeScript** + **Zustand** + **SQLite**
-(via `tauri-plugin-sql`) + a **local model server** (llama-server, OpenAI-compatible)
-for companion dialogue + `lindera` for Japanese morphological analysis.
-
-Runs fully offline against your own local model - nothing is sent to a hosted API.
+Everything runs on your own machine against your own local model. Nothing is
+sent to a hosted API, ever.
 
 ## Checkpoint status (see build log in chat / commit message)
 
