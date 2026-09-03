@@ -99,7 +99,7 @@ kinds (see each config's `_comment`).
    consistent backgrounds) using the trained LoRA's `<lora:...>` tag
    instead of IPAdapter reference images.
 
-## Known unverified/uncertain things
+## Known limitations
 
 - Whether the custom "Image Saver Simple" node's `/history` output entry
   matches vanilla `SaveImage`'s schema closely enough to matter - sidestepped
