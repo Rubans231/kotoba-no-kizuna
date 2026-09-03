@@ -81,6 +81,18 @@ Each of these documents one system in depth, including the exact numbers
 - [**Configuration**](docs/configuration.md) — every environment variable, where your data lives, and how to swap models.
 - [**Troubleshooting**](docs/troubleshooting.md) — the errors you'll actually hit and how to fix them.
 
+## How it works, in one paragraph
+
+A React frontend talks to a Rust backend through Tauri commands. Dialogue and
+character generation are sent to your local llama-server, but the model's output
+is pinned to an exact JSON shape — and, for teaching fields, to English-only
+character classes — by a **GBNF grammar**, so replies are always structured and
+can't drift into Japanese where English is expected. Every word taught is written
+to a vocab dictionary and a SQLite-backed SRS deck; the deck reschedules itself
+with the **SM-2** algorithm. Companion personas, abilities, commissions, and the
+gacha/random-banner economy all live in SQLite and survive restarts. See
+[Architecture](docs/architecture.md) for the full picture.
+
 ## Roadmap
 
 1. **Rotating shop** - same procedural character pool as the Random banner,
