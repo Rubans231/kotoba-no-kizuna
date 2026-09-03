@@ -118,3 +118,12 @@ There is no test suite configured yet.
   run as an alternate pull mechanic.
 - **Living worlds** (far future) — 3D character/environment generation with
   auto-rigging for real-time interactive bonding.
+
+## Where to go from here
+
+- New to the project? Start with [Architecture](docs/architecture.md), then
+  [Teaching & review](docs/teaching.md).
+- Setting up art generation? Go straight to
+  [`src-tauri/comfyui/README.md`](src-tauri/comfyui/README.md) and
+  [Character art & LoRA training](docs/art-and-lora.md).
+- Hit an error? [Troubleshooting](docs/troubleshooting.md).
