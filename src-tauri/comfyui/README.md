@@ -110,6 +110,9 @@ kinds (see each config's `_comment`).
   values before execution and rejects negative integers. The app now
   replaces negative seed sentinels with a real non-negative seed before
   submitting the prompt.
+- The API request now includes a minimal UI-format `extra_pnginfo.workflow`
+  with `nodes[].inputs` present, because Impact Pack's `ImpactSwitch` reads
+  that metadata directly during execution.
 - No part of the ComfyUI HTTP integration has been tested against a real
   running instance in the environment this was built in - the custom nodes
   these workflows depend on aren't set up here, and there's no GPU.
