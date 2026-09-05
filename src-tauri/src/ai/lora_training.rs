@@ -48,10 +48,11 @@ impl Framing {
 /// `use_quality_tags` should normally be false.
 ///
 /// Also writes dataset_config.toml alongside the images, with num_repeats
-/// scaled to the image count so total training steps land in the
-/// documented safe range (~1500-2000 steps at 10 epochs, batch size 1) -
-/// training beyond ~2400-3000 steps on Anima is documented to cause
-/// overfitting and degraded prompt adherence.
+/// scaled to the image count so OPTIMIZER updates (at the default script's
+/// 4x gradient accumulation) land in the documented safe range for
+/// character LoRAs (~1500-2000 updates at 10 epochs, batch size 1) -
+/// training Anima much beyond that is documented to cause overfitting and
+/// degraded prompt adherence.
 pub async fn assemble_dataset(
     images: &[TrainingImage<'_>],
     trigger_word: &str,
@@ -91,17 +92,24 @@ pub async fn assemble_dataset(
     Ok(())
 }
 
-/// num_repeats scaled so total steps land around 1800 (documented safe
-/// midpoint of the 1500-2000 target range) at 10 epochs, batch size 1:
-/// num_repeats = 1800 / (image_count * 10) = 180 / image_count. Matches
-/// the documented reference table exactly (12 images -> 15, 25 -> 7,
-/// 40 -> 4), rounding down to stay under the overfitting threshold rather
-/// than over it.
+/// num_repeats scaled so OPTIMIZER updates land around 1500 (the low end
+/// of the documented 1500-2000 range for character LoRAs) at 10 epochs,
+/// batch size 1, and the default script's --gradient_accumulation_steps 4.
+/// The earlier formula targeted ~1800 *sample* steps, which at 4x
+/// accumulation is only ~450 optimizer updates - far too few to bind the
+/// trigger to the character's identity (observed: a trained LoRA that
+/// didn't reproduce the character's palette/appearance).
+///
+/// num_repeats = 1500 * 4 / (image_count * 10) = 600 / image_count
+/// (12 images -> 50, 24 -> 25, 40 -> 15), rounding down to stay at or
+/// under the target rather than over it. If the script's
+/// KOTOB_GRADIENT_ACCUM_STEPS is overridden, effective updates scale
+/// proportionally.
 fn recommended_num_repeats(image_count: usize) -> usize {
     if image_count == 0 {
         return 1;
     }
-    (180 / image_count).max(1)
+    (600 / image_count).max(1)
 }
 
 async fn write_dataset_config(dataset_dir: &str, image_count: usize) -> Result<(), String> {
