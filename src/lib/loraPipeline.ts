@@ -17,15 +17,25 @@ export function buildTriggerWord(displayName: string, characterId: string): stri
   return `${namePart}${idPart}`;
 }
 
-async function generateOne(kind: string, positivePrompt: string, referenceImagePaths: string[] = []): Promise<string> {
+interface LoraRef {
+  name: string;
+  weight: number;
+}
+
+async function generateOne(
+  kind: string,
+  positivePrompt: string,
+  referenceImagePaths: string[] = [],
+  lora: LoraRef | null = null,
+): Promise<string> {
   return invoke<string>('generate_character_image', {
     kind,
     positivePrompt,
     negativePrompt: NEGATIVE_PROMPT,
     referenceImagePaths,
     inputImagePath: null,
-    loraName: null,
-    loraWeight: null,
+    loraName: lora ? lora.name : null,
+    loraWeight: lora ? lora.weight : null,
   });
 }
 
@@ -170,6 +180,44 @@ async function runTrainingStage(
   return loraPath;
 }
 
+const LORA_TEST_WEIGHT = 0.8;
+
+/**
+ * The strongest possible prompt for a trained character LoRA: it mirrors
+ * the dataset's own captions (locked trigger segment + physical traits +
+ * close-up framing), so every token the LoRA was trained on is present.
+ * Style tokens (artist names, "sketch", "pale colors", ...) deliberately
+ * don't belong here - they fight the LoRA and override the character.
+ */
+export function buildLoraTestPrompt(triggerWord: string, visualTags: string): string {
+  return `${triggerWord}, 1girl, solo, ${visualTags}, close-up, face focus, looking at viewer, simple background`;
+}
+
+function loraNameFromPath(loraPath: string): string {
+  const file = loraPath.split(/[\\/]/).pop() ?? loraPath;
+  return file.replace(/\.safetensors$/i, '');
+}
+
+/**
+ * Post-training sanity check: generate one image with ONLY the freshly
+ * trained LoRA (no IPAdapter references; the backend replaces the
+ * workflow's LoRA list with exactly this one). If this image doesn't look
+ * like the character, the training itself is the problem, not any
+ * downstream workflow or prompt.
+ */
+async function runLoraTestStage(persona: CompanionPersona, triggerWord: string, loraPath: string): Promise<string> {
+  const loraName = loraNameFromPath(loraPath);
+  const prompt = buildLoraTestPrompt(triggerWord, persona.visualTags);
+  log('info', `${persona.displayName}: generating LoRA verification image (${loraName} @ ${LORA_TEST_WEIGHT})...`);
+  const path = await generateOne('t2i_base', prompt, [], { name: loraName, weight: LORA_TEST_WEIGHT });
+  log('success', `${persona.displayName}: LoRA verification image ready - ${path}`);
+  log(
+    'info',
+    `${persona.displayName}: to check manually in ComfyUI, use positive "${prompt}" with only the ${loraName} LoRA active (0.7-0.8 strength, no other LoRAs, no style tokens)`,
+  );
+  return path;
+}
+
 /**
  * Runs whatever stages remain for this character, resuming from
  * existingState rather than starting over - each stage is only run if its
@@ -222,13 +270,22 @@ export async function runLoraPipelineForCharacter(
       onUpdate(state);
       const loraPath = await runTrainingStage(persona, state.triggerWord, state.trainingSetPaths);
       if (loraPath) {
-        state = { ...state, stage: 'complete', loraPath, errorMessage: null, updatedAt: new Date().toISOString() };
+        // Persist the LoRA path immediately (stage stays 'training') so a
+        // crash in the verification step below resumes at verification, not
+        // at a multi-hour retrain.
+        state = { ...state, stage: 'training', loraPath, updatedAt: new Date().toISOString() };
       } else {
         // Training deferred (no Kohya script) - stay in the 'training' stage
         // so the pipeline resumes right here once the script is configured.
         // The images and dataset are already saved and won't be regenerated.
         state = { ...state, stage: 'training', errorMessage: null, updatedAt: new Date().toISOString() };
       }
+      onUpdate(state);
+    }
+
+    if (state.loraPath && state.stage !== 'complete') {
+      await runLoraTestStage(persona, state.triggerWord, state.loraPath);
+      state = { ...state, stage: 'complete', errorMessage: null, updatedAt: new Date().toISOString() };
       onUpdate(state);
     }
 
