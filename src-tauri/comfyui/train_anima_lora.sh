@@ -47,7 +47,10 @@ QWEN3="${KOTOB_QWEN3:-${COMFYUI_ROOT}/models/text_encoders/qwen_3_06b_base.safet
 VAE="${KOTOB_VAE:-${COMFYUI_ROOT}/models/vae/qwen_image_vae.safetensors}"
 
 # --- Training hyperparameters (env-overridable) --------------------------------
-NETWORK_DIM="${KOTOB_NETWORK_DIM:-16}"
+# Rank 32: 16 proved too thin to bind the trigger to a character's full
+# identity (palette + outfit) on the 14B Anima DiT. Drop back to 16 via
+# KOTOB_NETWORK_DIM for a smaller/faster LoRA if you don't need the capacity.
+NETWORK_DIM="${KOTOB_NETWORK_DIM:-32}"
 NETWORK_ALPHA="${KOTOB_NETWORK_ALPHA:-16}"
 LEARNING_RATE="${KOTOB_LEARNING_RATE:-1e-4}"
 OPTIMIZER_TYPE="${KOTOB_OPTIMIZER_TYPE:-adafactor}"
