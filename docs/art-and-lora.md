@@ -4,12 +4,14 @@ The optional pipeline that gives each companion a face and then *trains* a LoRA
 so she renders consistently across images. It runs entirely on a local ComfyUI
 install and a local kohya/sd-scripts checkout — no hosted generation.
 
-> **Status: work in progress.** The pipeline runs end to end, but **character
-> fidelity is a known open issue** — trained LoRAs currently don't render
-> characters that clearly resemble their persona. That's the active work item.
-> Everything below describes how the machinery works; read the
-> [known issues](#known-issues-work-in-progress) section before investing a lot
-> of GPU time.
+> **Status:** The pipeline runs end to end, and the main causes of the
+> earlier fidelity problems (LoRA injection that never took effect, a
+> style-LoRA stack baked into the workflows, and an under-trained LoRA)
+> have been diagnosed and fixed. Characters trained **before** these fixes
+> need a full pipeline re-run (base image → views → training set → train)
+> to pick them up — the old images were generated under the old
+> conditions. See [known issues](#known-issues-work-in-progress) for the
+> details.
 
 <sub>[← Back to README](../README.md) · Related:
 [Architecture](architecture.md) ·
@@ -37,8 +39,8 @@ hours of work):
 | `base_image` | Generates one **character reference sheet** — A-pose, full body, neutral, white background — via the `t2i_base` workflow. This becomes the seed for everything else. |
 | `view_profiles` | Generates two **IPAdapter-anchored** views (front and back) using the base image as reference (`single_ipa` workflow), so the same character is established from both sides. |
 | `training_set` | Generates **24 training images** anchored to the view profiles (`double_ipa`), composed ~**40% close-up / 40% upper-body / 20% full-body** across a set of pose/expression variants. |
-| `training` | Assembles a kohya-style **dataset** (numbered images + 3-segment `|||` captions + `dataset_config.toml`) and shells out to your training script to produce the `.safetensors` LoRA. |
-| `complete` / `failed` | Terminal states. `failed` stores the error so the queue can move on. |
+| `training` | Assembles a kohya-style **dataset** (numbered images + 3-segment `|||` captions + `dataset_config.toml`) and shells out to your training script to produce the `.safetensors` LoRA. The LoRA path is persisted as soon as training returns, so a crash afterward resumes at the next step, not a retrain. |
+| `complete` / `failed` | Terminal states. Before a character is marked `complete`, the pipeline generates one **verification image** using *only* the freshly trained LoRA (prompt mirroring the training captions, no other LoRAs, no style tokens) — if that image doesn't look like the character, the training itself is the problem, not any downstream workflow. The exact prompt to reuse for manual ComfyUI checks is logged at the same time. `failed` stores the error so the queue can move on. |
 
 **Per character, sequential.** The queue (`src/lib/loraQueue.ts`) trains **one
 character at a time** — never in parallel, since they'd fight over the same
@@ -92,14 +94,31 @@ Once you set the script, re-running resumes right at the training step.
 
 ## Known issues (work in progress)
 
-- **Fidelity.** The end-to-end path works (images generate, the dataset assembles,
-  the LoRA trains), but the resulting LoRAs **don't yet render characters that
-  clearly look like their persona** — the outputs don't obviously resemble the
-  source. This is the open item. Likely contributors to investigate: the
-  IPAdapter reference strength/consistency across the 24-image set, caption
-  composition, and training hyperparameters (dim/alpha, steps, dropout). It is
-  *not* a wiring bug in the app — the pipeline is doing what it's told; the
-  model output quality is the gap.
+- **Fidelity (diagnosed, fixed — retrain to pick it up).** Earlier trained
+  LoRAs didn't resemble their characters. Root causes found and fixed:
+  1. **LoRA injection was a silent no-op.** The app appended `<lora:...>`
+     tags to the LoraManager node's `text` widget, but the node does
+     `del text` at queue time and loads only the `active: true` entries of
+     its `loras` list. The app now replaces that list directly.
+  2. **A style stack was baked into the workflow files.** The exports
+     shipped with a style LoRA active (`pile_epoch_20` at 1.0 — plus a
+     17-LoRA stack in the text widget), so every generation, including the
+     24 training images, ran with it. The app now clears the list on every
+     generation: base runs are pure Anima-Aesthetic, LoRA runs are exactly
+     "base + character LoRA".
+  3. **The LoRA was under-trained.** `num_repeats` was scaled to ~1800
+     *sample* steps, but the script trains at 4x gradient accumulation, so
+     that was only ~450 optimizer updates — far below the 1500-2000 a
+     character LoRA needs. It now targets optimizer updates directly
+     (24 images → `num_repeats = 25`).
+  4. **Rank too low.** Default `network_dim` raised 16 → 32 so the trigger
+     can bind to the character's full identity (palette + outfit).
+  
+  When testing a LoRA manually, keep the run clean: only the character
+  LoRA active (0.7-0.8 strength), and no style tokens that contradict the
+  design in the prompt (e.g. "sketch", "pale colors") — style tokens and
+  other LoRAs override the character. The verification image the pipeline
+  generates after training shows the exact prompt to reuse.
 - **VRAM.** Training is memory-hungry. The training script ships a GPU guard
   (it refuses to start unless enough VRAM is free, overridable via
   `KOTOB_IGNORE_GPU`). Running the local LLM *and* a LoRA train at the same time

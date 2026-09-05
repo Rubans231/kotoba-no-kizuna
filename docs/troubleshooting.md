@@ -82,9 +82,16 @@ Work through these in order:
   is free before launching (override with `KOTOB_IGNORE_GPU`). The usual
   culprit is the local LLM still occupying the GPU — **stop the model server
   first** if you're training on the same card.
-- **Trained LoRA doesn't resemble the character** — this is the current
-  *known fidelity issue*, not a setup bug. See
-  [Character art & LoRA → known issues](art-and-lora.md#known-issues-work-in-progress).
+- **Trained LoRA doesn't resemble the character** — first check the test
+  conditions, since they're the usual culprit: only the character LoRA
+  active (0.7-0.8 strength, no other LoRAs) and no style tokens that
+  contradict the design in the prompt (e.g. "sketch", "pale colors"). The
+  pipeline logs the exact prompt to reuse after training and generates a
+  verification image with only the LoRA — if *that* is off, the LoRA needs
+  retraining (characters trained before the fidelity fixes in
+  [Character art & LoRA → known
+  issues](art-and-lora.md#known-issues-work-in-progress) need a full
+  re-run).
 
 ## General
 

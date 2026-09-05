@@ -76,11 +76,19 @@ HF repo: https://huggingface.co/circlestone-labs/Anima.
 | Regional prompting | `regional.json` | Experimental - not automated yet, no config file wired up for it. |
 
 All configs found in `configs/*.json` use real node IDs discovered from
-your actual workflow exports - positive/negative prompt (24/25), LoRA tag
+your actual workflow exports - positive/negative prompt (24/25), LoRA
 injection (26), seed (65), and the save node (35) turned out to be
 identical across every variant, since they're all derived from the same
 base template. Only the reference/input image node IDs differ between
 kinds (see each config's `_comment`).
+
+Note on LoRA injection: the LoraManager loader ignores its `text` widget
+at queue time and loads only the `active: true` entries of its `loras`
+list, so the app **replaces that list wholesale on every generation** -
+empty for base runs (which also wipes any style stack baked into a
+workflow export), or exactly the character LoRA for LoRA runs. Re-export
+your workflows freely; whatever LoRAs you had active at export time won't
+affect the app's generations.
 
 ## Character creation pipeline
 
@@ -99,11 +107,12 @@ word, and the per-character queue — is documented in
 4. Assemble the dataset (`assemble_lora_dataset` Tauri command) - numbered
    images with matching three-segment `|||` caption files (locked trigger
    prefix, then physical traits, then framing/environment - kept separate
-   so outfit and background don't get baked into her identity), plus an
-   auto-generated `dataset_config.toml` with `num_repeats` scaled to land
-   training around 1500-2000 total steps. Quality tags are omitted since
-   this project targets Anima-Aesthetic, which was fine-tuned with those
-   strings stripped from its own training data.
+    so outfit and background don't get baked into her identity), plus an
+    auto-generated `dataset_config.toml` with `num_repeats` scaled to land
+    training around 1500-2000 optimizer updates (the app accounts for the
+    script's default 4x gradient accumulation). Quality tags are omitted
+    since this project targets Anima-Aesthetic, which was fine-tuned with
+    those strings stripped from its own training data.
 5. Train (`train_character_lora` Tauri command) - shells out to your
    script, returns the resulting LoRA's path once found.
 6. From then on, generate with `t2i_base` (or `i2i`/`single_ipa` for
