@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::time::Duration;
 use uuid::Uuid;
@@ -28,8 +28,10 @@ pub struct WorkflowConfig {
     pub ipadapter_image_node_ids: Vec<String>,
     /// Node ID (a LoadImage) that should receive the I2I source image, if this is an I2I workflow.
     pub input_image_node_id: Option<String>,
-    /// Node ID (the LoraManager loader)'s `text` field gets a `<lora:name:weight>` tag
-    /// appended (not replacing existing content) when a trained character LoRA should be used.
+    /// Node ID (the LoraManager loader) whose `loras` list the app replaces
+    /// on every generation - cleared for base generations, or set to the
+    /// trained character LoRA when one is requested. The node ignores its
+    /// `text` widget at queue time (see patch_lora_list).
     pub lora_tag_node_id: Option<String>,
     /// Node ID (a Save-Image-style node) whose output we should fetch. Only
     /// used to detect job completion via /history - the actual filename
@@ -169,14 +171,40 @@ fn patch_image_node_field(workflow: &mut Value, node_id: &str, field: &str, valu
     }
 }
 
-/// Appends a `<lora:name:weight>` tag to the LoraManager node's existing
-/// text rather than overwriting it, so it doesn't clobber any style LoRAs
-/// already dialed in on that node.
-fn patch_lora_tag(workflow: &mut Value, node_id: &str, lora_name: &str, weight: f32) {
-    if let Some(inputs) = workflow.get_mut(node_id).and_then(|n| n.get_mut("inputs")) {
-        let existing = inputs.get("text").and_then(|t| t.as_str()).unwrap_or("").to_string();
-        let tag = format!("<lora:{lora_name}:{weight:.2}>");
-        inputs["text"] = Value::String(format!("{existing} {tag}").trim().to_string());
+/// Replaces the LoraManager node's `loras` widget list - the only input the
+/// node actually honors at queue time. Its `load_loras` does `del text` and
+/// loads just the `active: true` list entries, so patching the `text`
+/// widget (as this function used to) was a silent no-op. The list is
+/// replaced wholesale on every call: the app owns the LoRA set for its own
+/// generations. Workflow exports carry whatever style stack the exporter
+/// had active (ours shipped with one, and a baked-in stack would fight the
+/// character LoRA and leak into base generations), so clearing it keeps
+/// base runs pure Anima-Aesthetic and LoRA runs exactly
+/// "base + character LoRA". The `text` widget is kept in sync so the UI
+/// view matches what actually gets loaded.
+fn patch_lora_list(workflow: &mut Value, node_id: &str, lora: Option<(&str, f32)>) {
+    let Some(inputs) = workflow.get_mut(node_id).and_then(|n| n.get_mut("inputs")) else {
+        return;
+    };
+    match lora {
+        Some((name, weight)) => {
+            inputs["loras"] = json!({
+                "__value__": [{
+                    "name": name,
+                    "strength": format!("{weight:.2}"),
+                    "clipStrength": format!("{weight:.2}"),
+                    "active": true,
+                    "expanded": false,
+                    "selected": false,
+                    "locked": false
+                }]
+            });
+            inputs["text"] = Value::String(format!("<lora:{name}:{weight:.2}>"));
+        }
+        None => {
+            inputs["loras"] = json!({ "__value__": [] });
+            inputs["text"] = Value::String(String::new());
+        }
     }
 }
 
@@ -403,8 +431,8 @@ pub async fn generate_image(
         let filename = upload_image(&client, path).await?;
         patch_image_node(&mut workflow, node_id, &filename);
     }
-    if let (Some(node_id), Some(lora)) = (&config.lora_tag_node_id, &lora) {
-        patch_lora_tag(&mut workflow, node_id, lora.name, lora.weight);
+    if let Some(node_id) = &config.lora_tag_node_id {
+        patch_lora_list(&mut workflow, node_id, lora.map(|l| (l.name, l.weight)));
     }
 
     sanitize_seed_nodes(&mut workflow);
