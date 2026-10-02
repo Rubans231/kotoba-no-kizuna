@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useBoundStore } from '../../../store/useBoundStore';
 import { useCompanionChat } from '../hooks/useCompanionChat';
 import { usePersona } from '../../../lib/personaResolver';
@@ -58,12 +58,24 @@ function VocabCallout({ items }: { items: VocabIntroduced[] }) {
 }
 
 export function ChatPanel({ instanceId }: ChatPanelProps) {
-  const [draft, setDraft] = useState('');
   const [showBond, setShowBond] = useState(false);
   const instance = useBoundStore((s) => s.companions[instanceId]);
   const messages = useBoundStore((s) => s.conversations[instanceId] || []);
+  const draft = useBoundStore((s) => s.drafts[instanceId] ?? '');
+  const setDraft = useBoundStore((s) => s.setDraft);
   const persona = usePersona(instance?.characterId ?? '');
   const { sendMessage, isSending, error } = useCompanionChat(instanceId);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Scroll to the most recent message whenever the conversation grows or
+  // the active companion changes - matches "chat opens at the bottom by
+  // default". Tab-switch-and-back scroll *position* preservation is
+  // handled separately by keeping ChatPanel mounted across tabs (see
+  // App.tsx) rather than here - this effect intentionally does NOT fire
+  // on unrelated re-renders, only on new messages or a companion switch.
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ block: 'end' });
+  }, [instanceId, messages.length]);
 
   if (!instance) return <div style={{ padding: 24, color: '#888' }}>Loading companion...</div>;
   if (!persona) return <div style={{ padding: 24, color: '#888' }}>Loading persona...</div>;
@@ -71,7 +83,7 @@ export function ChatPanel({ instanceId }: ChatPanelProps) {
   const handleSend = async () => {
     if (!draft.trim() || isSending) return;
     const text = draft;
-    setDraft('');
+    setDraft(instanceId, '');
     await sendMessage(text);
   };
 
@@ -155,6 +167,7 @@ export function ChatPanel({ instanceId }: ChatPanelProps) {
             {persona.displayName} is typing...
           </div>
         )}
+        <div ref={messagesEndRef} />
       </div>
 
       {error && <div style={{ color: '#ff6b6b', padding: '0 16px 8px', flexShrink: 0 }}>{error}</div>}
@@ -162,7 +175,7 @@ export function ChatPanel({ instanceId }: ChatPanelProps) {
       <div style={{ display: 'flex', gap: 8, padding: 16, borderTop: '1px solid #333', flexShrink: 0 }}>
         <input
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => setDraft(instanceId, e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSend()}
           placeholder={`Talk to ${persona.displayName}...`}
           style={{

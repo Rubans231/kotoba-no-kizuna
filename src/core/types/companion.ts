@@ -22,6 +22,14 @@ export interface CompanionPersona {
   teachingPhilosophy: string;
   speechStyle: string;
   dailyRoutine: DailyRoutine;
+  /** Natural-language appearance description for image generation (hair, eyes, outfit, palette). */
+  visualDesignPrompt: string;
+  /** Danbooru-style comma-separated tags (lowercase, spaces not underscores) describing physical traits/outfit - used specifically for LoRA training captions, not image-gen prompting. */
+  visualTags: string;
+  /** Whether her chat background should be dynamic/action "splash art" or calm/ambient "regular art" - decided once per character based on personality. */
+  backgroundStyle: 'splash' | 'regular';
+  /** The actual scene prompt used to generate that background. */
+  backgroundScenePrompt: string;
 }
 
 export interface PromptContext {
@@ -144,7 +152,7 @@ LEARNER LEVEL: The player is roughly ${ctx.targetLevel}. ${vocabLine}
 
 TEACHING DEPTH: ${teachingDepthInstruction(persona.rarity, forceDeep)}${abilitiesBlock}
 
-LANGUAGE RULE: "speech" is your in-character line and should be mostly Japanese (a little English mixed in is fine if it suits your personality). Every other text field - "translation", "meaning", "nuance", and "mnemonic" - must be written entirely in English, for a learner who cannot yet read Japanese explanations. Do not write Japanese script anywhere in those fields, not even a single word alongside its English gloss. For example, for the word 猫: meaning should read "cat", never "cat (猫)" or "ねこ - cat".
+LANGUAGE RULE: "speech" is your in-character line and should be mostly Japanese (a little English mixed in is fine if it suits your personality). "translation" and "meaning" must be written entirely in English with zero Japanese script - for example, for the word 猫: meaning should read "cat", never "cat (猫)" or "ねこ - cat". "nuance" and "mnemonic" should also be written primarily in English, but you MAY include the actual Japanese word or individual kanji/radical characters when that's the point being made - e.g. contrasting against another word ("unlike 漠然, this implies...") or breaking down a kanji's components ("登 combines 癶 and 豆") - just don't write whole Japanese sentences or explanations in those fields, only the specific word/character being referenced.
 
 RESPONSE FORMAT: Reply with ONLY a single valid JSON object - no markdown code fences, no commentary outside the JSON - matching exactly this shape:
 {

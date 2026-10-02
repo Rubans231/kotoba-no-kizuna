@@ -1,0 +1,11 @@
+{
+  "_comment": "Anima-single-IPA.json. One reference image. Used for simple-complexity characters' view profiles, and for consistent-background generation (reference = a generated background, combined with lora_tag_node_id for the trained character).",
+  "workflow_file": "single_ipa.json",
+  "positive_prompt_node_id": "24",
+  "negative_prompt_node_id": "25",
+  "ipadapter_image_node_ids": ["496"],
+  "lora_tag_node_id": "26",
+  "output_node_id": "35",
+  "output_filename_node_id": "35",
+  "output_path_node_id": "35"
+}

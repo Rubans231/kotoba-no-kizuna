@@ -8,7 +8,7 @@ const REPLY_GRAMMAR: &str = r#"
 root ::= "{" ws "\"speech\":" ws string "," ws "\"translation\":" ws english-string "," ws "\"vocab_introduced\":" ws vocab-array "," ws "\"relationship_delta\":" ws relationship-delta ws "}"
 relationship-delta ::= "{" ws "\"affection\":" ws integer "," ws "\"trust\":" ws integer "," ws "\"respect\":" ws integer "," ws "\"comfort\":" ws integer "," ws "\"friendship\":" ws integer "," ws "\"study_compatibility\":" ws integer "," ws "\"shared_memories\":" ws integer ws "}"
 vocab-array ::= "[" ws "]" | "[" ws vocab-item (ws "," ws vocab-item)* ws "]"
-vocab-item ::= "{" ws "\"word\":" ws string "," ws "\"reading\":" ws string "," ws "\"meaning\":" ws english-string "," ws "\"nuance\":" ws english-string "," ws "\"mnemonic\":" ws english-string "," ws "\"related_words\":" ws string-array ws "}"
+vocab-item ::= "{" ws "\"word\":" ws string "," ws "\"reading\":" ws string "," ws "\"meaning\":" ws english-string "," ws "\"nuance\":" ws string "," ws "\"mnemonic\":" ws string "," ws "\"related_words\":" ws string-array ws "}"
 string-array ::= "[" ws "]" | "[" ws string (ws "," ws string)* ws "]"
 string ::= "\"" string-char* "\""
 string-char ::= [^"\\\x00-\x1F] | "\\" (["\\/bfnrt] | "u" hex hex hex hex)
@@ -30,8 +30,9 @@ ws ::= [ \t\n]*
 // english-string rule used above, for the same reason (local models drift
 // into Japanese in fields that should be plain English).
 const CHARACTER_GRAMMAR: &str = r#"
-root ::= "{" ws "\"display_name\":" ws string "," ws "\"archetype\":" ws archetype "," ws "\"specialty\":" ws english-string "," ws "\"personality\":" ws english-string "," ws "\"teaching_philosophy\":" ws english-string "," ws "\"speech_style\":" ws english-string "," ws "\"daily_routine_morning\":" ws english-string "," ws "\"daily_routine_afternoon\":" ws english-string "," ws "\"daily_routine_evening\":" ws english-string "," ws "\"daily_routine_late_night\":" ws english-string "," ws "\"visual_design_prompt\":" ws english-string ws "}"
+root ::= "{" ws "\"display_name\":" ws string "," ws "\"archetype\":" ws archetype "," ws "\"specialty\":" ws english-string "," ws "\"personality\":" ws english-string "," ws "\"teaching_philosophy\":" ws english-string "," ws "\"speech_style\":" ws english-string "," ws "\"daily_routine_morning\":" ws english-string "," ws "\"daily_routine_afternoon\":" ws english-string "," ws "\"daily_routine_evening\":" ws english-string "," ws "\"daily_routine_late_night\":" ws english-string "," ws "\"visual_design_prompt\":" ws english-string "," ws "\"visual_tags\":" ws english-string "," ws "\"background_style\":" ws background-style "," ws "\"background_scene_prompt\":" ws english-string ws "}"
 archetype ::= "\"professor\"" | "\"big_sister\"" | "\"detective\"" | "\"idol\"" | "\"historian\""
+background-style ::= "\"splash\"" | "\"regular\""
 string ::= "\"" string-char* "\""
 string-char ::= [^"\\\x00-\x1F] | "\\" (["\\/bfnrt] | "u" hex hex hex hex)
 english-string ::= "\"" english-char* "\""

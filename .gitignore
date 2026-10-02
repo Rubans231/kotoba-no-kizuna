@@ -8,3 +8,5 @@ src-tauri/gen/
 *.db-journal
 .DS_Store
 Thumbs.db
+
+AGENTS.md

@@ -8,6 +8,8 @@ import type {
   VocabDictionaryEntry,
 } from '../core/types/database';
 import type { ProceduralCharacterPersona } from '../core/types/proceduralCharacter';
+import type { CharacterArt } from '../core/types/characterArt';
+import type { LoraPipelineState } from '../core/types/loraPipeline';
 import { defaultRelationshipStats } from '../lib/relationship';
 
 // Must match the "sqlite:kotoba.db" identifier registered with the
@@ -322,6 +324,9 @@ export async function loadProceduralCharacters(): Promise<ProceduralCharacterPer
       lateNight: r.daily_routine_late_night,
     },
     visualDesignPrompt: r.visual_design_prompt,
+    visualTags: r.visual_tags,
+    backgroundStyle: r.background_style,
+    backgroundScenePrompt: r.background_scene_prompt,
     source: r.source,
     generatedAt: r.generated_at,
   }));
@@ -333,8 +338,8 @@ export async function saveProceduralCharacter(p: ProceduralCharacterPersona): Pr
     `INSERT INTO procedural_characters
        (character_id, display_name, archetype, specialty, rarity, personality, teaching_philosophy, speech_style,
         daily_routine_morning, daily_routine_afternoon, daily_routine_evening, daily_routine_late_night,
-        visual_design_prompt, source)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        visual_design_prompt, visual_tags, background_style, background_scene_prompt, source)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       p.characterId,
       p.displayName,
@@ -349,6 +354,9 @@ export async function saveProceduralCharacter(p: ProceduralCharacterPersona): Pr
       p.dailyRoutine.evening,
       p.dailyRoutine.lateNight,
       p.visualDesignPrompt,
+      p.visualTags,
+      p.backgroundStyle,
+      p.backgroundScenePrompt,
       p.source,
     ],
   );
@@ -357,4 +365,125 @@ export async function saveProceduralCharacter(p: ProceduralCharacterPersona): Pr
 export async function deleteProceduralCharacter(characterId: string): Promise<void> {
   const db = await getDb();
   await db.execute('DELETE FROM procedural_characters WHERE character_id = ?', [characterId]);
+}
+
+// ---------------------------------------------------------------------------
+// Character art (generated images)
+// ---------------------------------------------------------------------------
+
+export async function loadCharacterArt(characterId: string): Promise<CharacterArt | null> {
+  const db = await getDb();
+  const rows = await db.select<any[]>('SELECT * FROM character_art WHERE character_id = ?', [characterId]);
+  if (!rows.length) return null;
+  const r = rows[0];
+  return {
+    characterId: r.character_id,
+    baseImagePath: r.base_image_path,
+    bannerImagePath: r.banner_image_path,
+    splashImagePath: r.splash_image_path,
+    chatBackgroundImagePath: r.chat_background_image_path,
+    generatedAt: r.generated_at,
+  };
+}
+
+export async function loadAllCharacterArt(): Promise<CharacterArt[]> {
+  const db = await getDb();
+  const rows = await db.select<any[]>('SELECT * FROM character_art', []);
+  return rows.map((r) => ({
+    characterId: r.character_id,
+    baseImagePath: r.base_image_path,
+    bannerImagePath: r.banner_image_path,
+    splashImagePath: r.splash_image_path,
+    chatBackgroundImagePath: r.chat_background_image_path,
+    generatedAt: r.generated_at,
+  }));
+}
+
+export async function upsertCharacterArt(art: CharacterArt): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `INSERT INTO character_art (character_id, base_image_path, banner_image_path, splash_image_path, chat_background_image_path)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(character_id) DO UPDATE SET
+       base_image_path = excluded.base_image_path,
+       banner_image_path = excluded.banner_image_path,
+       splash_image_path = excluded.splash_image_path,
+       chat_background_image_path = excluded.chat_background_image_path`,
+    [
+      art.characterId,
+      art.baseImagePath,
+      art.bannerImagePath,
+      art.splashImagePath,
+      art.chatBackgroundImagePath,
+    ],
+  );
+}
+
+// ---------------------------------------------------------------------------
+// LoRA training pipeline state
+// ---------------------------------------------------------------------------
+
+export async function loadLoraPipelineState(characterId: string): Promise<LoraPipelineState | null> {
+  const db = await getDb();
+  const rows = await db.select<any[]>(
+    'SELECT * FROM character_lora_pipeline WHERE character_id = ?',
+    [characterId],
+  );
+  if (!rows.length) return null;
+  const r = rows[0];
+  return {
+    characterId: r.character_id,
+    stage: r.stage,
+    triggerWord: r.trigger_word,
+    baseImagePath: r.base_image_path,
+    viewProfilePaths: JSON.parse(r.view_profile_paths || '[]'),
+    trainingSetPaths: JSON.parse(r.training_set_paths || '[]'),
+    loraPath: r.lora_path,
+    errorMessage: r.error_message,
+    updatedAt: r.updated_at,
+  };
+}
+
+export async function loadAllLoraPipelineStates(): Promise<LoraPipelineState[]> {
+  const db = await getDb();
+  const rows = await db.select<any[]>('SELECT * FROM character_lora_pipeline', []);
+  return rows.map((r) => ({
+    characterId: r.character_id,
+    stage: r.stage,
+    triggerWord: r.trigger_word,
+    baseImagePath: r.base_image_path,
+    viewProfilePaths: JSON.parse(r.view_profile_paths || '[]'),
+    trainingSetPaths: JSON.parse(r.training_set_paths || '[]'),
+    loraPath: r.lora_path,
+    errorMessage: r.error_message,
+    updatedAt: r.updated_at,
+  }));
+}
+
+export async function upsertLoraPipelineState(state: LoraPipelineState): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `INSERT INTO character_lora_pipeline
+       (character_id, stage, trigger_word, base_image_path, view_profile_paths, training_set_paths, lora_path, error_message, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+     ON CONFLICT(character_id) DO UPDATE SET
+       stage = excluded.stage,
+       trigger_word = excluded.trigger_word,
+       base_image_path = excluded.base_image_path,
+       view_profile_paths = excluded.view_profile_paths,
+       training_set_paths = excluded.training_set_paths,
+       lora_path = excluded.lora_path,
+       error_message = excluded.error_message,
+       updated_at = CURRENT_TIMESTAMP`,
+    [
+      state.characterId,
+      state.stage,
+      state.triggerWord,
+      state.baseImagePath,
+      JSON.stringify(state.viewProfilePaths),
+      JSON.stringify(state.trainingSetPaths),
+      state.loraPath,
+      state.errorMessage,
+    ],
+  );
 }

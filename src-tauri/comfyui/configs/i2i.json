@@ -1,0 +1,11 @@
+{
+  "_comment": "Anima-I2I.json. No IPAdapter in this export - meant for fine control over scenes once a character has a trained LoRA (via lora_tag_node_id), or for general img2img editing.",
+  "workflow_file": "i2i.json",
+  "positive_prompt_node_id": "24",
+  "negative_prompt_node_id": "25",
+  "input_image_node_id": "21",
+  "lora_tag_node_id": "26",
+  "output_node_id": "35",
+  "output_filename_node_id": "35",
+  "output_path_node_id": "35"
+}

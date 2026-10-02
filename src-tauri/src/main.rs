@@ -5,7 +5,7 @@ mod nlp;
 
 use nlp::analyzer::{NlpAnalyzer, TokenResult};
 use serde::Deserialize;
-use tauri::State;
+use tauri::{Manager, State};
 use tauri_plugin_sql::{Migration, MigrationKind};
 
 struct AppEngine {
@@ -46,10 +46,153 @@ async fn generate_character_concept(system_prompt: String) -> Result<String, Str
     ai::client::generate_character(&system_prompt).await
 }
 
+/// Generates one image via ComfyUI using the named workflow config. Returns
+/// the local file path of the saved PNG. `kind` selects which config in
+/// src-tauri/comfyui/configs/ to use - see src-tauri/comfyui/README.md.
+/// Images are saved under the app's own data directory rather than a path
+/// supplied by the frontend, so the location is correct and consistent
+/// across platforms.
+#[tauri::command]
+async fn generate_character_image(
+    app_handle: tauri::AppHandle,
+    kind: String,
+    positive_prompt: String,
+    negative_prompt: String,
+    reference_image_paths: Vec<String>,
+    input_image_path: Option<String>,
+    lora_name: Option<String>,
+    lora_weight: Option<f32>,
+) -> Result<String, String> {
+    let app_data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Couldn't resolve app data directory: {e}"))?;
+    let output_dir = app_data_dir.join("generated_images");
+
+    let lora = lora_name
+        .as_deref()
+        .map(|name| ai::comfyui::LoraInjection { name, weight: lora_weight.unwrap_or(1.0) });
+
+    ai::comfyui::generate_image(
+        &kind,
+        &positive_prompt,
+        &negative_prompt,
+        &reference_image_paths,
+        input_image_path.as_deref(),
+        lora,
+        &output_dir.to_string_lossy(),
+    )
+    .await
+}
+
+/// Assembles a kohya-ss-style training dataset (numbered images + matching
+/// three-segment `|||` caption files, plus a dataset_config.toml) from a
+/// set of already-generated images. `images` is a list of (path, framing)
+/// pairs where framing is "close_up" | "upper_body" | "full_body".
+/// `use_quality_tags` should be false when training against the Aesthetic
+/// checkpoint (this project's training target) and true only if pointed at
+/// Anima-Base instead. The dataset directory is resolved internally from
+/// character_id (app_data_dir/lora_datasets/{character_id}), same pattern
+/// as generate_character_image, so the frontend doesn't need to guess a
+/// writable path.
+#[tauri::command]
+async fn assemble_lora_dataset(
+    app_handle: tauri::AppHandle,
+    images: Vec<(String, String)>,
+    trigger_word: String,
+    visual_tags: String,
+    use_quality_tags: bool,
+    character_id: String,
+) -> Result<String, String> {
+    let framing_images: Result<Vec<ai::lora_training::TrainingImage>, String> = images
+        .iter()
+        .map(|(path, framing_str)| {
+            let framing = match framing_str.as_str() {
+                "close_up" => ai::lora_training::Framing::CloseUp,
+                "upper_body" => ai::lora_training::Framing::UpperBody,
+                "full_body" => ai::lora_training::Framing::FullBody,
+                other => return Err(format!("Unknown framing category '{other}' - expected close_up, upper_body, or full_body")),
+            };
+            Ok(ai::lora_training::TrainingImage { path: path.as_str(), framing })
+        })
+        .collect();
+    let framing_images = framing_images?;
+
+    let dataset_dir = lora_dataset_dir(&app_handle, &character_id)?;
+    ai::lora_training::assemble_dataset(&framing_images, &trigger_word, &visual_tags, use_quality_tags, &dataset_dir).await?;
+    Ok(dataset_dir)
+}
+
+/// Invokes the user-supplied training script (KOHYA_TRAIN_SCRIPT env var)
+/// against a dataset already assembled by assemble_lora_dataset for this
+/// character_id, and returns the resulting LoRA's path. output_dir
+/// defaults to ComfyUI's own models/loras directory when not overridden -
+/// intentionally NOT under app_data_dir, since that's a genuinely
+/// different location (the ComfyUI installation itself).
+#[tauri::command]
+async fn train_character_lora(
+    app_handle: tauri::AppHandle,
+    character_id: String,
+    character_name: String,
+    trigger_word: String,
+    output_dir: Option<String>,
+) -> Result<String, String> {
+    let dataset_dir = lora_dataset_dir(&app_handle, &character_id)?;
+    let resolved_output_dir = output_dir.unwrap_or_else(|| {
+        std::env::var("COMFYUI_LORAS_DIR")
+            .unwrap_or_else(|_| ai::comfyui::default_loras_dir().to_string_lossy().to_string())
+    });
+    ai::lora_training::train_lora(&dataset_dir, &resolved_output_dir, &character_name, &trigger_word).await
+}
+
+/// Fails fast when the LoRA training script is missing, so the frontend can
+/// avoid spending GPU time generating a training set that can never be
+/// trained. Returns the resolved script path on success.
+#[tauri::command]
+async fn lora_training_preflight() -> Result<String, String> {
+    let script_path = std::env::var("KOHYA_TRAIN_SCRIPT")
+        .unwrap_or_else(|_| ai::comfyui::comfyui_base_dir().join("train_anima_lora.sh").to_string_lossy().to_string());
+
+    if !std::path::Path::new(&script_path).exists() {
+        return Err(format!(
+            "LoRA training script not found at '{script_path}'. Set KOHYA_TRAIN_SCRIPT or create it - \
+             see comfyui/train_anima_lora.sh.example for the expected contract."
+        ));
+    }
+
+    Ok(script_path)
+}
+
+fn lora_dataset_dir(app_handle: &tauri::AppHandle, character_id: &str) -> Result<String, String> {
+    let app_data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Couldn't resolve app data directory: {e}"))?;
+    Ok(app_data_dir
+        .join("lora_datasets")
+        .join(character_id)
+        .to_string_lossy()
+        .to_string())
+}
+
+fn load_local_env() {
+    // Loads the project's .env regardless of the binary's working directory.
+    // Harmless no-op if none of the candidate paths exist.
+    let candidates = [
+        std::path::PathBuf::from(".env"),
+        std::path::PathBuf::from("src-tauri").join(".env"),
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".env"),
+    ];
+    for candidate in candidates {
+        if candidate.exists() {
+            let _ = dotenvy::from_path(candidate);
+            return;
+        }
+    }
+}
+
 fn main() {
-    // Loads src-tauri/.env in dev so ANTHROPIC_API_KEY doesn't need to be
-    // exported manually every session. Harmless no-op if the file is absent.
-    dotenvy::dotenv().ok();
+    load_local_env();
 
     let migrations = vec![
         Migration {
@@ -88,6 +231,30 @@ fn main() {
             sql: include_str!("../migrations/006_random_characters.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 7,
+            description: "character_art",
+            sql: include_str!("../migrations/007_character_art.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 8,
+            description: "procedural_character_art_fields",
+            sql: include_str!("../migrations/008_procedural_character_art_fields.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 9,
+            description: "visual_tags",
+            sql: include_str!("../migrations/009_visual_tags.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 10,
+            description: "lora_pipeline",
+            sql: include_str!("../migrations/010_lora_pipeline.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
@@ -102,7 +269,11 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             tokenize_japanese_text,
             send_chat_message,
-            generate_character_concept
+            generate_character_concept,
+            generate_character_image,
+            assemble_lora_dataset,
+            train_character_lora,
+            lora_training_preflight
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

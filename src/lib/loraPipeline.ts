@@ -1,0 +1,300 @@
+import { invoke } from '@tauri-apps/api/core';
+import { useBoundStore } from '../store/useBoundStore';
+import type { CompanionPersona } from '../core/types/companion';
+import type { LoraPipelineState, TrainingSetImage } from '../core/types/loraPipeline';
+import { newPipelineState } from '../core/types/loraPipeline';
+
+function log(level: 'info' | 'success' | 'error', message: string): void {
+  useBoundStore.getState().addLog(level, message);
+}
+
+const NEGATIVE_PROMPT = 'lowres, blurry, bad anatomy, extra limbs, watermark, signature, text, jpeg artifacts';
+
+/** Short, unique-ish trigger token - deliberately not just the display name, since training docs specifically recommend an invented token unlikely to already carry associations in the text encoder. */
+export function buildTriggerWord(displayName: string, characterId: string): string {
+  const namePart = displayName.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 6) || 'char';
+  const idPart = characterId.replace(/[^a-z0-9]/gi, '').slice(-4).toLowerCase();
+  return `${namePart}${idPart}`;
+}
+
+interface LoraRef {
+  name: string;
+  weight: number;
+}
+
+async function generateOne(
+  kind: string,
+  positivePrompt: string,
+  referenceImagePaths: string[] = [],
+  lora: LoraRef | null = null,
+): Promise<string> {
+  return invoke<string>('generate_character_image', {
+    kind,
+    positivePrompt,
+    negativePrompt: NEGATIVE_PROMPT,
+    referenceImagePaths,
+    inputImagePath: null,
+    loraName: lora ? lora.name : null,
+    loraWeight: lora ? lora.weight : null,
+  });
+}
+
+/**
+ * Whether the user's LoRA training script is configured. Only the final
+ * train step needs it - the base/view/training images and the assembled
+ * dataset are reusable artifacts that generate fine without it. A missing
+ * script therefore defers training rather than aborting the whole pipeline
+ * before any image is generated.
+ */
+async function isTrainingScriptAvailable(): Promise<boolean> {
+  try {
+    await invoke<string>('lora_training_preflight');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function runBaseImageStage(persona: CompanionPersona): Promise<string> {
+  log('info', `${persona.displayName}: generating base image...`);
+  const prompt = `${persona.visualDesignPrompt}, A-pose, arms slightly raised, standing straight, blank white background, full body, neutral expression, character reference sheet`;
+  const path = await generateOne('t2i_base', prompt);
+  log('success', `${persona.displayName}: base image ready`);
+  return path;
+}
+
+async function runViewProfilesStage(persona: CompanionPersona, baseImagePath: string): Promise<string[]> {
+  log('info', `${persona.displayName}: generating view profile 1/2 (front)...`);
+  const front = await generateOne(
+    'single_ipa',
+    `${persona.visualDesignPrompt}, front view, standing, full body, simple background`,
+    [baseImagePath],
+  );
+  log('info', `${persona.displayName}: generating view profile 2/2 (back)...`);
+  const back = await generateOne(
+    'single_ipa',
+    `${persona.visualDesignPrompt}, back view, standing, full body, simple background, from behind`,
+    [baseImagePath],
+  );
+  log('success', `${persona.displayName}: view profiles ready`);
+  return [front, back];
+}
+
+const CLOSE_UP_VARIANTS = [
+  'close-up, face focus, looking at viewer, neutral expression',
+  'close-up, face focus, smiling, looking at viewer',
+  'close-up, face focus, looking away, soft expression',
+  'close-up, face focus, three-quarter view, looking at viewer',
+];
+const UPPER_BODY_VARIANTS = [
+  'upper body, standing, looking at viewer, arms at sides',
+  'upper body, standing, arms crossed, confident pose',
+  'upper body, side view, looking away',
+  'upper body, three-quarter view, gentle pose',
+];
+const FULL_BODY_VARIANTS = [
+  'full body, standing, looking at viewer',
+  'full body, dynamic pose, action stance',
+];
+
+interface TrainingSetPlanItem {
+  framing: TrainingSetImage['framing'];
+  promptSuffix: string;
+}
+
+/** ~40% close-up / ~40% upper-body / ~20% full-body, per documented recommended composition. */
+export function buildTrainingSetPlan(targetCount: number): TrainingSetPlanItem[] {
+  const closeUpCount = Math.round(targetCount * 0.4);
+  const upperBodyCount = Math.round(targetCount * 0.4);
+  const fullBodyCount = Math.max(0, targetCount - closeUpCount - upperBodyCount);
+
+  const plan: TrainingSetPlanItem[] = [];
+  for (let i = 0; i < closeUpCount; i++) {
+    plan.push({ framing: 'close_up', promptSuffix: CLOSE_UP_VARIANTS[i % CLOSE_UP_VARIANTS.length] });
+  }
+  for (let i = 0; i < upperBodyCount; i++) {
+    plan.push({ framing: 'upper_body', promptSuffix: UPPER_BODY_VARIANTS[i % UPPER_BODY_VARIANTS.length] });
+  }
+  for (let i = 0; i < fullBodyCount; i++) {
+    plan.push({ framing: 'full_body', promptSuffix: FULL_BODY_VARIANTS[i % FULL_BODY_VARIANTS.length] });
+  }
+  return plan;
+}
+
+const TRAINING_SET_SIZE = 24;
+
+async function runTrainingSetStage(
+  persona: CompanionPersona,
+  viewProfilePaths: string[],
+  alreadyDone: TrainingSetImage[],
+  onProgress: (done: TrainingSetImage[]) => void,
+): Promise<TrainingSetImage[]> {
+  const plan = buildTrainingSetPlan(TRAINING_SET_SIZE);
+  const results = [...alreadyDone];
+
+  for (let i = alreadyDone.length; i < plan.length; i++) {
+    const { framing, promptSuffix } = plan[i];
+    log('info', `${persona.displayName}: training image ${i + 1}/${plan.length} (${framing})...`);
+    const path = await generateOne('double_ipa', `${persona.visualDesignPrompt}, ${promptSuffix}`, viewProfilePaths);
+    results.push({ path, framing });
+    onProgress(results);
+  }
+
+  log('success', `${persona.displayName}: training set ready (${plan.length} images)`);
+  return results;
+}
+
+async function runTrainingStage(
+  persona: CompanionPersona,
+  triggerWord: string,
+  trainingSetPaths: TrainingSetImage[],
+): Promise<string | null> {
+  const images = trainingSetPaths.map((t): [string, string] => [t.path, t.framing]);
+
+  log('info', `${persona.displayName}: assembling training dataset...`);
+  await invoke('assemble_lora_dataset', {
+    images,
+    triggerWord,
+    visualTags: persona.visualTags,
+    // Train against the Aesthetic checkpoint, whose training data had quality
+    // tags stripped - so omit them here (Base would need true).
+    useQualityTags: false,
+    characterId: persona.characterId,
+  });
+
+  // Only this final step needs the user's Kohya script. A missing script
+  // defers training (returns null) instead of aborting - the generated
+  // images + assembled dataset are already saved and reusable.
+  if (!(await isTrainingScriptAvailable())) {
+    log('info', `${persona.displayName}: images + dataset ready - LoRA training deferred (set KOHYA_TRAIN_SCRIPT and re-run to train)`);
+    return null;
+  }
+
+  log('info', `${persona.displayName}: training LoRA (this can take a long time)...`);
+  const loraPath = await invoke<string>('train_character_lora', {
+    characterId: persona.characterId,
+    characterName: persona.characterId,
+    triggerWord,
+  });
+  log('success', `${persona.displayName}: LoRA training complete - ${loraPath}`);
+  return loraPath;
+}
+
+const LORA_TEST_WEIGHT = 0.8;
+
+/**
+ * The strongest possible prompt for a trained character LoRA: it mirrors
+ * the dataset's own captions (locked trigger segment + physical traits +
+ * close-up framing), so every token the LoRA was trained on is present.
+ * Style tokens (artist names, "sketch", "pale colors", ...) deliberately
+ * don't belong here - they fight the LoRA and override the character.
+ */
+export function buildLoraTestPrompt(triggerWord: string, visualTags: string): string {
+  return `${triggerWord}, 1girl, solo, ${visualTags}, close-up, face focus, looking at viewer, simple background`;
+}
+
+function loraNameFromPath(loraPath: string): string {
+  const file = loraPath.split(/[\\/]/).pop() ?? loraPath;
+  return file.replace(/\.safetensors$/i, '');
+}
+
+/**
+ * Post-training sanity check: generate one image with ONLY the freshly
+ * trained LoRA (no IPAdapter references; the backend replaces the
+ * workflow's LoRA list with exactly this one). If this image doesn't look
+ * like the character, the training itself is the problem, not any
+ * downstream workflow or prompt.
+ */
+async function runLoraTestStage(persona: CompanionPersona, triggerWord: string, loraPath: string): Promise<string> {
+  const loraName = loraNameFromPath(loraPath);
+  const prompt = buildLoraTestPrompt(triggerWord, persona.visualTags);
+  log('info', `${persona.displayName}: generating LoRA verification image (${loraName} @ ${LORA_TEST_WEIGHT})...`);
+  const path = await generateOne('t2i_base', prompt, [], { name: loraName, weight: LORA_TEST_WEIGHT });
+  log('success', `${persona.displayName}: LoRA verification image ready - ${path}`);
+  log(
+    'info',
+    `${persona.displayName}: to check manually in ComfyUI, use positive "${prompt}" with only the ${loraName} LoRA active (0.7-0.8 strength, no other LoRAs, no style tokens)`,
+  );
+  return path;
+}
+
+/**
+ * Runs whatever stages remain for this character, resuming from
+ * existingState rather than starting over - each stage is only run if its
+ * output isn't already present. onUpdate is called after every stage
+ * transition so the caller can persist progress incrementally - losing
+ * hours of work to an app restart partway through would be a bad
+ * experience given how long this pipeline can realistically take.
+ */
+export async function runLoraPipelineForCharacter(
+  persona: CompanionPersona,
+  existingState: LoraPipelineState | null,
+  onUpdate: (state: LoraPipelineState) => void,
+): Promise<LoraPipelineState> {
+  let state =
+    existingState ?? newPipelineState(persona.characterId, buildTriggerWord(persona.displayName, persona.characterId));
+
+  if (state.stage === 'complete') return state;
+
+  log('info', `${persona.displayName}: starting LoRA pipeline (resuming from "${state.stage}")`);
+
+  try {
+    if (!state.baseImagePath) {
+      const baseImagePath = await runBaseImageStage(persona);
+      state = { ...state, stage: 'base_image', baseImagePath, updatedAt: new Date().toISOString() };
+      onUpdate(state);
+    }
+
+    if (state.viewProfilePaths.length === 0) {
+      const viewProfilePaths = await runViewProfilesStage(persona, state.baseImagePath as string);
+      state = { ...state, stage: 'view_profiles', viewProfilePaths, updatedAt: new Date().toISOString() };
+      onUpdate(state);
+    }
+
+    if (state.trainingSetPaths.length < TRAINING_SET_SIZE) {
+      const trainingSetPaths = await runTrainingSetStage(
+        persona,
+        state.viewProfilePaths,
+        state.trainingSetPaths,
+        (partial) => {
+          state = { ...state, stage: 'training_set', trainingSetPaths: partial, updatedAt: new Date().toISOString() };
+          onUpdate(state);
+        },
+      );
+      state = { ...state, stage: 'training_set', trainingSetPaths, updatedAt: new Date().toISOString() };
+      onUpdate(state);
+    }
+
+    if (!state.loraPath) {
+      state = { ...state, stage: 'training', updatedAt: new Date().toISOString() };
+      onUpdate(state);
+      const loraPath = await runTrainingStage(persona, state.triggerWord, state.trainingSetPaths);
+      if (loraPath) {
+        // Persist the LoRA path immediately (stage stays 'training') so a
+        // crash in the verification step below resumes at verification, not
+        // at a multi-hour retrain.
+        state = { ...state, stage: 'training', loraPath, updatedAt: new Date().toISOString() };
+      } else {
+        // Training deferred (no Kohya script) - stay in the 'training' stage
+        // so the pipeline resumes right here once the script is configured.
+        // The images and dataset are already saved and won't be regenerated.
+        state = { ...state, stage: 'training', errorMessage: null, updatedAt: new Date().toISOString() };
+      }
+      onUpdate(state);
+    }
+
+    if (state.loraPath && state.stage !== 'complete') {
+      await runLoraTestStage(persona, state.triggerWord, state.loraPath);
+      state = { ...state, stage: 'complete', errorMessage: null, updatedAt: new Date().toISOString() };
+      onUpdate(state);
+    }
+
+    return state;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log('error', `${persona.displayName}: FAILED - ${message}`);
+    state = { ...state, stage: 'failed', errorMessage: message, updatedAt: new Date().toISOString() };
+    onUpdate(state);
+    throw err;
+  }
+}

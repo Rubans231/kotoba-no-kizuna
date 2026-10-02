@@ -1,0 +1,11 @@
+{
+  "_comment": "Anima-fourIPA.json. Four chained reference images (extra views). Used for visually complex characters' view-profile bootstrapping.",
+  "workflow_file": "four_ipa.json",
+  "positive_prompt_node_id": "24",
+  "negative_prompt_node_id": "25",
+  "ipadapter_image_node_ids": ["496", "504", "507", "509"],
+  "lora_tag_node_id": "26",
+  "output_node_id": "35",
+  "output_filename_node_id": "35",
+  "output_path_node_id": "35"
+}

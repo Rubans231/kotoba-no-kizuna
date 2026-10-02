@@ -19,6 +19,13 @@ export const COMPANIONS: Record<string, CompanionPersona> = {
       evening: 'You are organizing your notes for tomorrow, humming softly to yourself.',
       lateNight: 'You are still awake later than you should be, chasing down the origin of one particularly stubborn grammar pattern.',
     },
+    visualDesignPrompt:
+      'Original anime girl, long straight dark blue hair with a single braid, soft amber eyes, wire-rim glasses, wearing a muted sage-green cardigan over a white blouse, calm gentle expression, holding an old book, soft warm color palette, no jewelry, original design.',
+    visualTags:
+      'long hair, dark blue hair, single braid, amber eyes, glasses, sage-green cardigan, white blouse, gentle expression, holding book',
+    backgroundStyle: 'regular',
+    backgroundScenePrompt:
+      'A quiet study room lined with old bookshelves, warm afternoon light through a window, a steaming teacup on a wooden desk, calm and cozy atmosphere, no characters in frame, background art only.',
   },
   rin_slang: {
     characterId: 'rin_slang',
@@ -38,6 +45,13 @@ export const COMPANIONS: Record<string, CompanionPersona> = {
       evening: 'You are gaming with friends, headset slightly crooked, narrating everything out loud.',
       lateNight: 'You are definitely supposed to be asleep but are instead deep in a group chat rabbit hole.',
     },
+    visualDesignPrompt:
+      'Original anime girl, messy short orange-red hair with clipped-in streak, bright energetic grin, one eye winking, oversized hoodie half off one shoulder over a graphic tee, fingerless gloves, holding a phone, vibrant punchy color palette, dynamic pose, original design.',
+    visualTags:
+      'short hair, orange hair, messy hair, hair streak, grin, one eye closed, oversized hoodie, off-shoulder, graphic tee, fingerless gloves, holding phone',
+    backgroundStyle: 'splash',
+    backgroundScenePrompt:
+      'A messy, cozy bedroom at night lit by monitor glow and string lights, gaming setup with scattered energy drink cans, energetic chaotic-but-comfortable atmosphere, no characters in frame, background art only.',
   },
   yui_kanji: {
     characterId: 'yui_kanji',
@@ -57,6 +71,13 @@ export const COMPANIONS: Record<string, CompanionPersona> = {
       evening: 'You are re-examining an old case - a kanji whose etymology never quite satisfied you.',
       lateNight: 'You are wide awake, magnifying glass in hand (theatrically, there is nothing to actually magnify), certain you are one clue from a breakthrough.',
     },
+    visualDesignPrompt:
+      'Original anime girl, sleek black bob with sharp blunt bangs, piercing violet eyes, dark trench coat over a vest and tie, deerstalker-inspired cap held rather than worn, confident smirk, monochrome-and-violet color palette, dramatic pose, original design.',
+    visualTags:
+      'black hair, bob cut, blunt bangs, violet eyes, trench coat, vest, necktie, holding hat, smirk, dramatic pose',
+    backgroundStyle: 'splash',
+    backgroundScenePrompt:
+      'A dim study lined with case files and reference books, single dramatic spotlight beam, floating chalk diagrams of kanji radicals on a dark wall, moody detective-noir atmosphere, no characters in frame, background art only.',
   },
   sora_news: {
     characterId: 'sora_news',
@@ -76,5 +97,12 @@ export const COMPANIONS: Record<string, CompanionPersona> = {
       evening: 'You are rehearsing an announcer-style delivery in front of the mirror, fully committed.',
       lateNight: 'You are reviewing today\'s "performance" in your head, already excited for tomorrow\'s lesson.',
     },
+    visualDesignPrompt:
+      'Original anime girl, sleek shoulder-length silver hair with a neat side part, bright confident smile, wearing a crisp navy blazer with a small pin brooch, holding a microphone like a newscaster, clean bright color palette, poised energetic pose, original design.',
+    visualTags:
+      'long hair, silver hair, side part, bright smile, navy blazer, brooch, holding microphone, confident pose',
+    backgroundStyle: 'splash',
+    backgroundScenePrompt:
+      'A polished news broadcast studio set with soft blue stage lighting and a glowing city skyline backdrop screen, bright professional yet lively atmosphere, no characters in frame, background art only.',
   },
 };

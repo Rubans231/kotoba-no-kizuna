@@ -1,0 +1,11 @@
+{
+  "_comment": "Anima-Double-IPA.json. Two chained reference images (e.g. front + back view). Used for simple-complexity characters' view-profile bootstrapping.",
+  "workflow_file": "double_ipa.json",
+  "positive_prompt_node_id": "24",
+  "negative_prompt_node_id": "25",
+  "ipadapter_image_node_ids": ["496", "504"],
+  "lora_tag_node_id": "26",
+  "output_node_id": "35",
+  "output_filename_node_id": "35",
+  "output_path_node_id": "35"
+}

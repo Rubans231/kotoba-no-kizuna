@@ -6,18 +6,30 @@ import { CommissionsPanel } from './features/commissions/components/CommissionsP
 import { GachaScreen } from './features/gacha/components/GachaScreen';
 import { AbilitiesPanel } from './features/abilities/components/AbilitiesPanel';
 import { RandomBannerScreen } from './features/randomBanner/components/RandomBannerScreen';
+import { ActivityLogToggle } from './features/activityLog/components/ActivityLogToggle';
 import { useBoundStore } from './store/useBoundStore';
 import type { AppTab } from './store/slices/createUiSlice';
 import { COMMISSION_DEFINITIONS, todayKey } from './data/commissions';
 import { defaultRelationshipStats } from './lib/relationship';
 import { checkForNewUnlocks } from './lib/abilityUnlocks';
 import { resolvePersona } from './lib/personaResolver';
+import { processLoraQueue } from './lib/loraQueue';
 import * as db from './lib/db';
 
 const DEV_USER_ID = 'usr_dev_test_01';
 const STARTER_CHARACTER_ID = 'rin_slang';
 
 const TABS: AppTab[] = ['chat', 'review', 'commissions', 'gacha', 'random', 'abilities', 'sandbox'];
+
+const STAGE_LABELS: Record<string, string> = {
+  not_started: 'queued',
+  base_image: 'base image',
+  view_profiles: 'view profiles',
+  training_set: 'training set',
+  training: 'training LoRA',
+  complete: 'complete',
+  failed: 'failed',
+};
 
 function App() {
   const [ready, setReady] = useState(false);
@@ -31,6 +43,9 @@ function App() {
   const setCommissions = useBoundStore((s) => s.setCommissions);
   const setVocabDictionary = useBoundStore((s) => s.setVocabDictionary);
   const setProceduralCharacters = useBoundStore((s) => s.setProceduralCharacters);
+  const setAllLoraPipelineStates = useBoundStore((s) => s.setAllLoraPipelineStates);
+  const activeLoraTraining = useBoundStore((s) => s.activeLoraTraining);
+  const loraPipelineStates = useBoundStore((s) => s.loraPipelineStates);
   const unlockAbility = useBoundStore((s) => s.unlockAbility);
   const hasUnseenAbilityUnlock = useBoundStore((s) => s.hasUnseenAbilityUnlock);
   const setHasUnseenAbilityUnlock = useBoundStore((s) => s.setHasUnseenAbilityUnlock);
@@ -97,6 +112,9 @@ function App() {
         const proceduralCharacters = await db.loadProceduralCharacters();
         setProceduralCharacters(proceduralCharacters);
 
+        const loraPipelineStates = await db.loadAllLoraPipelineStates();
+        setAllLoraPipelineStates(loraPipelineStates);
+
         // Seed today's commissions if this is the first launch today.
         const today = todayKey();
         let commissions = await db.loadCommissions(today);
@@ -129,6 +147,12 @@ function App() {
         }
 
         setReady(true);
+
+        // Fire-and-forget: train any missing LoRAs in the background.
+        // Never blocks the UI - if ComfyUI/the training script isn't set
+        // up yet, individual characters just fail and get skipped (see
+        // processLoraQueue), not the app startup itself.
+        void processLoraQueue();
       } catch (err) {
         setInitError(err instanceof Error ? err.message : String(err));
       }
@@ -220,57 +244,84 @@ function App() {
             </button>
           ))}
         </div>
-        <div style={{ display: 'flex', gap: 12, color: '#ffd166', fontSize: 14 }}>
-          <span>{profile?.gems ?? 0} gems</span>
-          <span style={{ color: '#8ab4f8' }}>{profile?.shards ?? 0} shards</span>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          {activeLoraTraining && (
+            <span style={{ color: '#8ab4f8', fontSize: 12, fontStyle: 'italic' }}>
+              Training {resolvePersona(activeLoraTraining, proceduralCharacters)?.displayName ?? activeLoraTraining}
+              {loraPipelineStates[activeLoraTraining] ? ` (${STAGE_LABELS[loraPipelineStates[activeLoraTraining].stage]})` : ''}...
+            </span>
+          )}
+          <ActivityLogToggle />
+          <div style={{ display: 'flex', gap: 12, color: '#ffd166', fontSize: 14 }}>
+            <span>{profile?.gems ?? 0} gems</span>
+            <span style={{ color: '#8ab4f8' }}>{profile?.shards ?? 0} shards</span>
+          </div>
         </div>
       </nav>
-      <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-        {activeTab === 'chat' && (
-          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-            {Object.keys(companions).length > 1 && (
-              <div
-                style={{
-                  display: 'flex',
-                  gap: 6,
-                  padding: '10px 16px',
-                  borderBottom: '1px solid #222',
-                  flexShrink: 0,
-                }}
-              >
-                {Object.values(companions).map((c) => {
-                  const label = resolvePersona(c.characterId, proceduralCharacters)?.displayName ?? c.characterId;
-                  return (
-                    <button
-                      key={c.instanceId}
-                      onClick={() => setActiveCompanion(c.instanceId)}
-                      style={{
-                        padding: '5px 12px',
-                        borderRadius: 14,
-                        border: 'none',
-                        fontSize: 12,
-                        background: activeCompanionId === c.instanceId ? '#007acc' : '#2a2a2a',
-                        color: '#fff',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-            <div style={{ flex: 1, minHeight: 0 }}>
-              {activeCompanionId && <ChatPanel instanceId={activeCompanionId} />}
+      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+        <div
+          style={{
+            display: activeTab === 'chat' ? 'flex' : 'none',
+            flexDirection: 'column',
+            height: '100%',
+            minHeight: 0,
+          }}
+        >
+          {Object.keys(companions).length > 1 && (
+            <div
+              style={{
+                display: 'flex',
+                gap: 6,
+                padding: '10px 16px',
+                borderBottom: '1px solid #222',
+                flexShrink: 0,
+              }}
+            >
+              {Object.values(companions).map((c) => {
+                const label = resolvePersona(c.characterId, proceduralCharacters)?.displayName ?? c.characterId;
+                return (
+                  <button
+                    key={c.instanceId}
+                    onClick={() => setActiveCompanion(c.instanceId)}
+                    style={{
+                      padding: '5px 12px',
+                      borderRadius: 14,
+                      border: 'none',
+                      fontSize: 12,
+                      background: activeCompanionId === c.instanceId ? '#007acc' : '#2a2a2a',
+                      color: '#fff',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
             </div>
+          )}
+          <div style={{ flex: 1, minHeight: 0 }}>
+            {activeCompanionId && <ChatPanel instanceId={activeCompanionId} />}
           </div>
-        )}
-        {activeTab === 'review' && <ReviewSession />}
-        {activeTab === 'commissions' && <CommissionsPanel />}
-        {activeTab === 'gacha' && <GachaScreen />}
-        {activeTab === 'random' && <RandomBannerScreen />}
-        {activeTab === 'abilities' && <AbilitiesPanel />}
-        {activeTab === 'sandbox' && <DevSandbox />}
+        </div>
+
+        <div style={{ display: activeTab === 'review' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
+          <ReviewSession />
+        </div>
+        <div style={{ display: activeTab === 'commissions' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
+          <CommissionsPanel />
+        </div>
+        <div style={{ display: activeTab === 'gacha' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
+          <GachaScreen />
+        </div>
+        <div style={{ display: activeTab === 'random' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
+          <RandomBannerScreen />
+        </div>
+        <div style={{ display: activeTab === 'abilities' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
+          <AbilitiesPanel />
+        </div>
+        <div style={{ display: activeTab === 'sandbox' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
+          <DevSandbox />
+        </div>
       </div>
     </div>
   );

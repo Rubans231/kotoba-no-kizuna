@@ -1,0 +1,10 @@
+{
+  "_comment": "Anima-T2I-upscale.json. Same as t2i_base plus an UltimateSDUpscale pass tacked on. Left as a manual/experimental option per your note - a dedicated external upscale-only workflow will likely replace this later. Not called by the automated pipeline.",
+  "workflow_file": "t2i_upscale.json",
+  "positive_prompt_node_id": "24",
+  "negative_prompt_node_id": "25",
+  "lora_tag_node_id": "26",
+  "output_node_id": "35",
+  "output_filename_node_id": "35",
+  "output_path_node_id": "35"
+}

@@ -20,6 +20,10 @@ She should teach some specific facet of the Japanese language (a grammar point, 
 
 Also write visual_design_prompt: a natural-language description of her appearance (hair, eyes, outfit, color palette, expression, pose) suitable as a prompt for an anime-style image generation model. Purely original design - no copyrighted characters, no real people, nothing that could be mistaken for an existing IP.
 
+Also write visual_tags: the SAME physical design, but as comma-separated, lowercase, Danbooru-style tags (spaces instead of underscores, e.g. "blue hair, long hair, blue eyes, sailor uniform, pleated skirt"). This is used for LoRA training captions, not image generation, so it needs to be tag-style, not a sentence.
+
+Decide background_style based on her personality: "splash" for a dynamic, expressive, action-posed background (fits energetic/dramatic personalities), or "regular" for a calm, ambient, everyday scene (fits quieter/homier personalities). Then write background_scene_prompt: a natural-language description of that scene, consistent with her design and one of her daily routine activities.
+
 Fill in a short one-sentence daily routine for each of morning/afternoon/evening/late_night describing what she's doing at that time, in character.
 
 Respond with ONLY the JSON object in the required shape - no commentary, no markdown fences.`;
@@ -37,6 +41,9 @@ interface RawCharacterConcept {
   daily_routine_evening: string;
   daily_routine_late_night: string;
   visual_design_prompt: string;
+  visual_tags: string;
+  background_style: 'splash' | 'regular';
+  background_scene_prompt: string;
 }
 
 /**
@@ -78,6 +85,9 @@ export async function generateProceduralCharacter(
       lateNight: parsed.daily_routine_late_night,
     },
     visualDesignPrompt: parsed.visual_design_prompt,
+    visualTags: parsed.visual_tags,
+    backgroundStyle: parsed.background_style,
+    backgroundScenePrompt: parsed.background_scene_prompt,
     source,
     generatedAt: new Date().toISOString(),
   };
