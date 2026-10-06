@@ -1,5 +1,7 @@
 # Kotoba no Kizuna
 
+<video src=["demo_compressed.mp4"](https://github.com/user-attachments/assets/bd4cf51a-e6e4-4c6d-8595-ac08fc6c48b4) autoplay loop muted playsinline width="100%"></video>
+
 **Kotoba no Kizuna** (言葉の絆, "bonds of words") is an offline, AI-companion
 desktop app for learning Japanese the way you'd actually learn it from people:
 by talking. You summon a cast of companions — each a different personality with
